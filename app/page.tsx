@@ -702,19 +702,20 @@ export default function Home() {
           <div className="container mx-auto px-6 py-4">
             <div className="flex items-center justify-between gap-4">
               {/* Right side - Title with Mobile Toggle Button */}
-              <div className="flex-1 flex items-center gap-3 [dir=rtl]:flex-row-reverse [dir=rtl]:justify-end">
-                {/* Mobile Hamburger Toggle Button - מופיע רק במובייל, מצד ימין למעלה */}
+              <div className="flex-1 relative">
+                {/* Mobile Hamburger Toggle Button - absolute positioning במובייל, מצד ימין למעלה */}
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="flex md:hidden flex-shrink-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 p-2"
+                  className="absolute top-0 right-0 md:hidden z-50 flex-shrink-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 p-2"
                   title="רשימות קודמות"
                 >
                   <Menu className="h-5 w-5" />
                 </Button>
                 
-                <div className="flex-1 text-right">
+                {/* Title - עם padding מימין במובייל כדי לא להסתיר את הכפתור */}
+                <div className="text-right pr-12 md:pr-0">
                   <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-50">
                     רשימות קניות
                   </h1>
