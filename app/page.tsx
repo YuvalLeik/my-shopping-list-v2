@@ -715,19 +715,19 @@ export default function Home() {
               
               {/* Left side - User Selector and Mobile Menu */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Mobile Menu Button */}
+                {/* Mobile Menu Button - מופיע ראשון במובייל */}
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setSidebarOpen(true)}
-                  className="md:hidden rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+                  className="md:hidden flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700"
                   title="רשימות קודמות"
                 >
                   <Menu className="h-4 w-4" />
                 </Button>
                 
-                {/* User Selector */}
-                <div className="flex-shrink-0">
+                {/* User Selector - מוסתר במובייל, מופיע בדסקטופ */}
+                <div className="flex-shrink-0 hidden md:block">
                 {loadingUsers ? (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
                     <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
@@ -744,7 +744,7 @@ export default function Home() {
                       localStorage.setItem('active_user_id', userId);
                     }}
                   >
-                    <SelectTrigger className="flex items-center gap-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors [dir=rtl]:flex-row-reverse w-auto min-w-[160px]">
+                    <SelectTrigger className="flex items-center gap-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors [dir=rtl]:flex-row-reverse w-auto md:min-w-[160px]">
                       <User className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                       <div className="flex flex-col items-start [dir=rtl]:items-end">
                         <span className="text-xs text-slate-500 dark:text-slate-400 leading-none">משתמש</span>
