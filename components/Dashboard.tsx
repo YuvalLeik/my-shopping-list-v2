@@ -37,6 +37,10 @@ export function Dashboard({ userId }: DashboardProps) {
     }
 
     async function loadStats() {
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         const data = await getDashboardStats(userId);
@@ -167,7 +171,7 @@ export function Dashboard({ userId }: DashboardProps) {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ category, total_quantity }) => `${category}: ${total_quantity}`}
+                  label={(entry: any) => `${entry.category}: ${entry.total_quantity}`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="total_quantity"
