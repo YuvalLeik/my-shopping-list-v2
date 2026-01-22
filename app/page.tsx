@@ -715,19 +715,19 @@ export default function Home() {
               
               {/* Left side - User Selector and Mobile Menu */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Mobile Menu Button - מופיע ראשון במובייל */}
+                {/* Mobile Menu Button - מופיע רק במובייל */}
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setSidebarOpen(true)}
-                  className="md:hidden flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+                  className="flex md:hidden flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700"
                   title="רשימות קודמות"
                 >
                   <Menu className="h-4 w-4" />
                 </Button>
                 
                 {/* User Selector - מוסתר במובייל, מופיע בדסקטופ */}
-                <div className="flex-shrink-0 hidden md:block">
+                <div className="hidden md:flex flex-shrink-0 items-center">
                 {loadingUsers ? (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
                     <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
