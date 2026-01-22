@@ -272,6 +272,9 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
   // This component renders collapsible sections: Dashboard and Previous Lists
   // Updated to ensure TaskBarSection components are properly rendered
   const SidebarContent = () => {
+    // Debug: Log to verify component is rendering
+    console.log('[Sidebar] SidebarContent rendering', { activeUserId, previousListsCount: previousLists.length });
+    
     // Ensure we always render TaskBarSection components when activeUserId exists
     if (!activeUserId) {
       return (
@@ -287,7 +290,10 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
         <TaskBarSection
           title="Dashboard"
           isExpanded={expandedSections.dashboard}
-          onToggle={() => setExpandedSections(prev => ({ ...prev, dashboard: !prev.dashboard }))}
+          onToggle={() => {
+            console.log('[Sidebar] Dashboard toggle clicked');
+            setExpandedSections(prev => ({ ...prev, dashboard: !prev.dashboard }));
+          }}
         >
           <Dashboard userId={activeUserId} />
         </TaskBarSection>
@@ -296,13 +302,19 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
         <TaskBarSection
           title={`${t.previousLists} (${previousLists.length})`}
           isExpanded={expandedSections.previousLists}
-          onToggle={() => setExpandedSections(prev => ({ ...prev, previousLists: !prev.previousLists }))}
+          onToggle={() => {
+            console.log('[Sidebar] Previous Lists toggle clicked');
+            setExpandedSections(prev => ({ ...prev, previousLists: !prev.previousLists }));
+          }}
         >
           <PreviousListsContent />
         </TaskBarSection>
       </div>
     );
   };
+
+  // Debug: Log to verify Sidebar component is rendering
+  console.log('[Sidebar] Component rendering', { activeUserId, isOpen, expandedSections });
 
   return (
     <>
