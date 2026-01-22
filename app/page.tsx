@@ -701,31 +701,33 @@ export default function Home() {
         <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200/50 dark:border-slate-800/50">
           <div className="container mx-auto px-6 py-4">
             <div className="flex items-center justify-between gap-4">
-              {/* Right side - Title */}
-              <div className="flex-1 text-right">
-                <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-50">
-                  רשימות קניות
-                </h1>
-                {activeUserName && (
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                    משתמש: {activeUserName}
-                  </p>
-                )}
-              </div>
-              
-              {/* Left side - User Selector and Mobile Menu */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Mobile Menu Button - מופיע רק במובייל */}
+              {/* Right side - Title with Mobile Toggle Button */}
+              <div className="flex-1 text-right flex items-center justify-end gap-3 [dir=rtl]:flex-row-reverse">
+                {/* Mobile Hamburger Toggle Button - מופיע רק במובייל, מצד ימין למעלה */}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setSidebarOpen(true)}
-                  className="flex md:hidden flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="flex md:hidden flex-shrink-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 p-2"
                   title="רשימות קודמות"
                 >
-                  <Menu className="h-4 w-4" />
+                  <Menu className="h-5 w-5" />
                 </Button>
                 
+                <div className="flex-1 text-right">
+                  <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-50">
+                    רשימות קניות
+                  </h1>
+                  {activeUserName && (
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                      משתמש: {activeUserName}
+                    </p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Left side - User Selector */}
+              <div className="flex items-center gap-2 flex-shrink-0">
                 {/* User Selector - מוסתר במובייל, מופיע בדסקטופ */}
                 <div className="hidden md:flex flex-shrink-0 items-center">
                 {loadingUsers ? (
