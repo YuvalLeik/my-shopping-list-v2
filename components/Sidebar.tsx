@@ -326,7 +326,8 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
   return (
     <>
       {/* Desktop Sidebar - Fixed */}
-      <aside className="hidden md:flex w-64 h-screen sticky top-0 flex-col border-l border-r border-slate-200/50 dark:border-slate-800/50 shadow-lg [dir=rtl]:border-l-0 [dir=ltr]:border-r-0">
+      {/* Debug: Always show sidebar for testing - remove 'hidden' temporarily */}
+      <aside className="flex w-64 h-screen sticky top-0 flex-col border-l border-r border-slate-200/50 dark:border-slate-800/50 shadow-lg [dir=rtl]:border-l-0 [dir=ltr]:border-r-0 bg-red-100">
         <SidebarContent />
       </aside>
 
