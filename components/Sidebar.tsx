@@ -24,6 +24,13 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSelect, refreshTrigger, onListTitleUpdate, onListDuplicated, isOpen = false, onClose }: SidebarProps) {
+  // Debug: Log immediately when component mounts
+  console.log('[Sidebar] Component MOUNTED/RENDERING', { 
+    activeUserId, 
+    isOpen, 
+    hasTaskBarSection: typeof TaskBarSection !== 'undefined',
+    hasDashboard: typeof Dashboard !== 'undefined'
+  });
   const [previousLists, setPreviousLists] = useState<GroceryListWithCount[]>([]);
   const [loadingLists, setLoadingLists] = useState(false);
   const [editingListId, setEditingListId] = useState<string | null>(null);
