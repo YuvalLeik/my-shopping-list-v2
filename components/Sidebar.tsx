@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Calendar, Edit2, Check, X, Copy } from 'lucide-react';
+import { Loader2, Calendar, Edit2, Check, X, Copy, ArrowRight } from 'lucide-react';
 import { fetchGroceryListsWithItemCount, GroceryListWithCount, duplicateGroceryList } from '@/lib/groceryLists';
 import { t } from '@/lib/translations';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,6 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
   const [updatingTitle, setUpdatingTitle] = useState(false);
   const [duplicatingListId, setDuplicatingListId] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState({
-    dashboard: true,
     previousLists: true,
   });
 
@@ -276,8 +275,7 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
   );
 
   // Task Bar content component (reusable for desktop and mobile)
-  // This component renders collapsible sections: Dashboard and Previous Lists
-  // Updated to ensure TaskBarSection components are properly rendered
+  // This component renders collapsible sections: Dashboard link and Previous Lists
   const SidebarContent = () => {
     // Debug: Log to verify component is rendering
     console.log('[Sidebar] SidebarContent rendering', { activeUserId, previousListsCount: previousLists.length });
@@ -293,17 +291,23 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
 
     return (
       <div className="h-full flex flex-col bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm overflow-y-auto">
-        {/* Dashboard Section */}
-        <TaskBarSection
-          title="Dashboard"
-          isExpanded={expandedSections.dashboard}
-          onToggle={() => {
-            console.log('[Sidebar] Dashboard toggle clicked');
-            setExpandedSections(prev => ({ ...prev, dashboard: !prev.dashboard }));
-          }}
-        >
-          <Dashboard userId={activeUserId} />
-        </TaskBarSection>
+        {/* Dashboard Link Section */}
+        <div className="border-b border-slate-200/50 dark:border-slate-800/50">
+          {activeUserId ? (
+            <a
+              href={`/dashboard?userId=${activeUserId}`}
+              className="w-full flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors [dir=rtl]:flex-row-reverse"
+            >
+              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Dashboard</h3>
+              <ArrowRight className="h-4 w-4 text-slate-600 dark:text-slate-400 flex-shrink-0" />
+            </a>
+          ) : (
+            <div className="w-full flex items-center justify-between p-4 opacity-50 cursor-not-allowed">
+              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Dashboard</h3>
+              <ArrowRight className="h-4 w-4 text-slate-600 dark:text-slate-400 flex-shrink-0" />
+            </div>
+          )}
+        </div>
 
         {/* Previous Lists Section */}
         <TaskBarSection
@@ -326,8 +330,7 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
   return (
     <>
       {/* Desktop Sidebar - Fixed */}
-      {/* Debug: Always show sidebar for testing - remove 'hidden' temporarily */}
-      <aside className="flex w-64 h-screen sticky top-0 flex-col border-l border-r border-slate-200/50 dark:border-slate-800/50 shadow-lg [dir=rtl]:border-l-0 [dir=ltr]:border-r-0 bg-red-100">
+      <aside className="flex w-64 h-screen sticky top-0 flex-col border-l border-r border-slate-200/50 dark:border-slate-800/50 shadow-lg [dir=rtl]:border-l-0 [dir=ltr]:border-r-0">
         <SidebarContent />
       </aside>
 

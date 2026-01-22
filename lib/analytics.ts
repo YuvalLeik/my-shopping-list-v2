@@ -263,6 +263,105 @@ export async function getAvgItemsPerList(userId: string): Promise<number> {
 }
 
 /**
+ * Get all unique purchased item names for a user
+ */
+export async function getAllPurchasedItemNames(userId: string): Promise<string[]> {
+  try {
+    const { data: completedLists, error: listsError } = await supabase
+      .from('grocery_lists')
+      .select('id')
+      .eq('local_user_id', userId)
+      .not('completed_at', 'is', null);
+
+    if (listsError || !completedLists || completedLists.length === 0) {
+      return [];
+    }
+
+    const listIds = completedLists.map(list => list.id);
+
+    const { data: items, error: itemsError } = await supabase
+      .from('grocery_items')
+      .select('name')
+      .in('list_id', listIds)
+      .eq('purchased', true);
+
+    if (itemsError || !items) {
+      return [];
+    }
+
+    // Get unique names and sort alphabetically
+    const uniqueNames = [...new Set(items.map(item => item.name))].sort((a, b) => a.localeCompare(b, 'he'));
+    return uniqueNames;
+  } catch (error) {
+    console.error('Error getting all purchased item names:', error);
+    return [];
+  }
+}
+
+/**
+ * Get monthly trend for a specific item
+ */
+export async function getItemMonthlyTrend(userId: string, itemName: string): Promise<MonthlyTrend[]> {
+  try {
+    const { data: completedLists, error: listsError } = await supabase
+      .from('grocery_lists')
+      .select('id, completed_at')
+      .eq('local_user_id', userId)
+      .not('completed_at', 'is', null)
+      .order('completed_at', { ascending: true });
+
+    if (listsError || !completedLists || completedLists.length === 0) {
+      return [];
+    }
+
+    // Group by month
+    const monthlyMap = new Map<string, number>();
+
+    for (const list of completedLists) {
+      if (!list.completed_at) continue;
+
+      const date = new Date(list.completed_at);
+      const month = date.getMonth() + 1;
+      const year = date.getFullYear();
+      const monthYear = `${year}-${String(month).padStart(2, '0')}`;
+
+      // Get items count for this specific item in this list
+      const { data: items } = await supabase
+        .from('grocery_items')
+        .select('quantity')
+        .eq('list_id', list.id)
+        .eq('purchased', true)
+        .ilike('name', itemName);
+
+      const itemCount = items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+
+      if (itemCount > 0) {
+        const current = monthlyMap.get(monthYear) || 0;
+        monthlyMap.set(monthYear, current + itemCount);
+      }
+    }
+
+    // Convert to array and format
+    const monthNames = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+
+    return Array.from(monthlyMap.entries())
+      .map(([monthYear, total_items]) => {
+        const [year, month] = monthYear.split('-');
+        return {
+          month: monthNames[parseInt(month) - 1],
+          year: parseInt(year),
+          month_year: monthYear,
+          total_items,
+        };
+      })
+      .sort((a, b) => a.month_year.localeCompare(b.month_year));
+  } catch (error) {
+    console.error('Error getting item monthly trend:', error);
+    return [];
+  }
+}
+
+/**
  * Get all dashboard stats at once
  */
 export async function getDashboardStats(userId: string): Promise<DashboardStats> {
