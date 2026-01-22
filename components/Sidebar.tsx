@@ -271,31 +271,38 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
   // Task Bar content component (reusable for desktop and mobile)
   // This component renders collapsible sections: Dashboard and Previous Lists
   // Updated to ensure TaskBarSection components are properly rendered
-  const SidebarContent = () => (
-    <div className="h-full flex flex-col bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm overflow-y-auto">
-      {activeUserId && (
-        <>
-          {/* Dashboard Section */}
-          <TaskBarSection
-            title="Dashboard"
-            isExpanded={expandedSections.dashboard}
-            onToggle={() => setExpandedSections({ ...expandedSections, dashboard: !expandedSections.dashboard })}
-          >
-            <Dashboard userId={activeUserId} />
-          </TaskBarSection>
+  const SidebarContent = () => {
+    // Ensure we always render TaskBarSection components when activeUserId exists
+    if (!activeUserId) {
+      return (
+        <div className="h-full flex flex-col bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm overflow-y-auto p-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">יש לבחור משתמש</p>
+        </div>
+      );
+    }
 
-          {/* Previous Lists Section */}
-          <TaskBarSection
-            title={`${t.previousLists} (${previousLists.length})`}
-            isExpanded={expandedSections.previousLists}
-            onToggle={() => setExpandedSections({ ...expandedSections, previousLists: !expandedSections.previousLists })}
-          >
-            <PreviousListsContent />
-          </TaskBarSection>
-        </>
-      )}
-    </div>
-  );
+    return (
+      <div className="h-full flex flex-col bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm overflow-y-auto">
+        {/* Dashboard Section */}
+        <TaskBarSection
+          title="Dashboard"
+          isExpanded={expandedSections.dashboard}
+          onToggle={() => setExpandedSections(prev => ({ ...prev, dashboard: !prev.dashboard }))}
+        >
+          <Dashboard userId={activeUserId} />
+        </TaskBarSection>
+
+        {/* Previous Lists Section */}
+        <TaskBarSection
+          title={`${t.previousLists} (${previousLists.length})`}
+          isExpanded={expandedSections.previousLists}
+          onToggle={() => setExpandedSections(prev => ({ ...prev, previousLists: !prev.previousLists }))}
+        >
+          <PreviousListsContent />
+        </TaskBarSection>
+      </div>
+    );
+  };
 
   return (
     <>
