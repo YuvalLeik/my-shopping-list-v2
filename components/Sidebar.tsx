@@ -269,6 +269,7 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
   );
 
   // Task Bar content component (reusable for desktop and mobile)
+  // This component renders collapsible sections: Dashboard and Previous Lists
   const SidebarContent = () => (
     <div className="h-full flex flex-col bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm overflow-y-auto">
       {activeUserId && (
