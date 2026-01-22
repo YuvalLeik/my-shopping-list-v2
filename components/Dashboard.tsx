@@ -37,13 +37,14 @@ export function Dashboard({ userId }: DashboardProps) {
     }
 
     async function loadStats() {
-      if (!userId) {
+      const currentUserId = userId;
+      if (!currentUserId) {
         setLoading(false);
         return;
       }
       setLoading(true);
       try {
-        const data = await getDashboardStats(userId);
+        const data = await getDashboardStats(currentUserId);
         setStats(data);
       } catch (error) {
         console.error('Failed to load dashboard stats:', error);
