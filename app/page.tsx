@@ -702,7 +702,7 @@ export default function Home() {
           <div className="container mx-auto px-6 py-4">
             <div className="flex items-center justify-between gap-4">
               {/* Right side - Title with Mobile Toggle Button */}
-              <div className="flex-1 text-right flex items-center justify-end gap-3 [dir=rtl]:flex-row-reverse">
+              <div className="flex-1 flex items-center gap-3 [dir=rtl]:flex-row-reverse [dir=rtl]:justify-end">
                 {/* Mobile Hamburger Toggle Button - מופיע רק במובייל, מצד ימין למעלה */}
                 <Button
                   variant="outline"
