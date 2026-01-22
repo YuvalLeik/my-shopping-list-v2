@@ -8,6 +8,8 @@ import { t } from '@/lib/translations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
+import { TaskBarSection } from '@/components/TaskBarSection';
+import { Dashboard } from '@/components/Dashboard';
 
 interface SidebarProps {
   activeUserId: string | null;
@@ -28,6 +30,10 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
   const [editingTitle, setEditingTitle] = useState('');
   const [updatingTitle, setUpdatingTitle] = useState(false);
   const [duplicatingListId, setDuplicatingListId] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState({
+    dashboard: true,
+    previousLists: true,
+  });
 
   useEffect(() => {
     if (!activeUserId) {
@@ -123,149 +129,168 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
     }
   };
 
-  // Sidebar content component (reusable for desktop and mobile)
-  const SidebarContent = () => (
-    <div className="h-full flex flex-col bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm overflow-y-auto">
-      {/* Previous Lists */}
-      {activeUserId && (
-        <div className="p-4 flex-1 overflow-y-auto">
-          <h2 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-100">
-            {t.previousLists} ({previousLists.length})
-          </h2>
-          {loadingLists ? (
-            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
-              <span className="text-sm">{t.loadingLists}</span>
-            </div>
-          ) : previousLists.length === 0 ? (
-            <p className="text-sm text-slate-600 dark:text-slate-400">{t.noLists}</p>
-          ) : (
-            <div className="space-y-2">
-              {previousLists.map((list) => (
-                <div
-                  key={list.id}
-                  className={`w-full border rounded-lg p-3 transition-colors ${
-                    selectedListId === list.id
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-card border-border hover:bg-accent'
-                  }`}
-                >
-                  <div className="flex flex-col items-start w-full">
-                    <div className="flex items-center gap-2 w-full group">
-                      <Calendar className="h-4 w-4 opacity-70 flex-shrink-0" />
-                      {editingListId === list.id ? (
-                        <div className="flex items-center gap-2 flex-1 [dir=rtl]:flex-row-reverse">
-                          <Input
-                            value={editingTitle}
-                            onChange={(e) => setEditingTitle(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleSaveEdit(list.id);
-                              } else if (e.key === 'Escape') {
-                                handleCancelEdit();
-                              }
-                            }}
-                            className="text-sm h-7 flex-1"
-                            disabled={updatingTitle}
-                            autoFocus
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSaveEdit(list.id);
-                            }}
-                            disabled={updatingTitle}
-                          >
-                            {updatingTitle ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Check className="h-3 w-3" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCancelEdit();
-                            }}
-                            disabled={updatingTitle}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <>
-                          <span
-                            className="text-sm font-medium flex-1 cursor-pointer hover:underline"
-                            onClick={() => {
-                              onListSelect(list.id);
-                              // Close drawer on mobile when selecting a list
-                              if (onClose) {
-                                onClose();
-                              }
-                            }}
-                          >
-                            {list.title || formatDate(list.created_at)}
-                          </span>
-                          {onListTitleUpdate && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={(e) => handleStartEdit(list, e)}
-                              title="ערוך כותרת"
-                            >
-                              <Edit2 className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </>
-                      )}
+  // Previous Lists content component
+  const PreviousListsContent = () => (
+    <div className="p-4">
+      {loadingLists ? (
+        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+          <span className="text-sm">{t.loadingLists}</span>
+        </div>
+      ) : previousLists.length === 0 ? (
+        <p className="text-sm text-slate-600 dark:text-slate-400">{t.noLists}</p>
+      ) : (
+        <div className="space-y-2">
+          {previousLists.map((list) => (
+            <div
+              key={list.id}
+              className={`w-full border rounded-lg p-3 transition-colors ${
+                selectedListId === list.id
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-card border-border hover:bg-accent'
+              }`}
+            >
+              <div className="flex flex-col items-start w-full">
+                <div className="flex items-center gap-2 w-full group">
+                  <Calendar className="h-4 w-4 opacity-70 flex-shrink-0" />
+                  {editingListId === list.id ? (
+                    <div className="flex items-center gap-2 flex-1 [dir=rtl]:flex-row-reverse">
+                      <Input
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleSaveEdit(list.id);
+                          } else if (e.key === 'Escape') {
+                            handleCancelEdit();
+                          }
+                        }}
+                        className="text-sm h-7 flex-1"
+                        disabled={updatingTitle}
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSaveEdit(list.id);
+                        }}
+                        disabled={updatingTitle}
+                      >
+                        {updatingTitle ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Check className="h-3 w-3" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCancelEdit();
+                        }}
+                        disabled={updatingTitle}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
                     </div>
-                    <div className="flex items-center justify-between w-full mt-1">
+                  ) : (
+                    <>
                       <span
-                        className={`text-xs ${selectedListId === list.id ? 'opacity-80' : 'text-muted-foreground'}`}
+                        className="text-sm font-medium flex-1 cursor-pointer hover:underline"
                         onClick={() => {
                           onListSelect(list.id);
+                          // Close drawer on mobile when selecting a list
                           if (onClose) {
                             onClose();
                           }
                         }}
                       >
-                        {list.item_count} {list.item_count === 1 ? t.item : 'פריטים'}
+                        {list.title || formatDate(list.created_at)}
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={(e) => handleDuplicateList(list.id, e)}
-                        disabled={duplicatingListId === list.id}
-                        title="שכפל לרשימה חדשה"
-                      >
-                        {duplicatingListId === list.id ? (
-                          <>
-                            <Loader2 className="h-3 w-3 me-1 animate-spin" />
-                            <span>משכפל...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-3 w-3 me-1" />
-                            <span className="hidden sm:inline">שכפל</span>
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
+                      {onListTitleUpdate && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => handleStartEdit(list, e)}
+                          title="ערוך כותרת"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </>
+                  )}
                 </div>
-              ))}
+                <div className="flex items-center justify-between w-full mt-1">
+                  <span
+                    className={`text-xs ${selectedListId === list.id ? 'opacity-80' : 'text-muted-foreground'}`}
+                    onClick={() => {
+                      onListSelect(list.id);
+                      if (onClose) {
+                        onClose();
+                      }
+                    }}
+                  >
+                    {list.item_count} {list.item_count === 1 ? t.item : 'פריטים'}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={(e) => handleDuplicateList(list.id, e)}
+                    disabled={duplicatingListId === list.id}
+                    title="שכפל לרשימה חדשה"
+                  >
+                    {duplicatingListId === list.id ? (
+                      <>
+                        <Loader2 className="h-3 w-3 me-1 animate-spin" />
+                        <span>משכפל...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3 me-1" />
+                        <span className="hidden sm:inline">שכפל</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
-          )}
+          ))}
         </div>
+      )}
+    </div>
+  );
+
+  // Task Bar content component (reusable for desktop and mobile)
+  const SidebarContent = () => (
+    <div className="h-full flex flex-col bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm overflow-y-auto">
+      {activeUserId && (
+        <>
+          {/* Dashboard Section */}
+          <TaskBarSection
+            title="Dashboard"
+            isExpanded={expandedSections.dashboard}
+            onToggle={() => setExpandedSections({ ...expandedSections, dashboard: !expandedSections.dashboard })}
+          >
+            <Dashboard userId={activeUserId} />
+          </TaskBarSection>
+
+          {/* Previous Lists Section */}
+          <TaskBarSection
+            title={`${t.previousLists} (${previousLists.length})`}
+            isExpanded={expandedSections.previousLists}
+            onToggle={() => setExpandedSections({ ...expandedSections, previousLists: !expandedSections.previousLists })}
+          >
+            <PreviousListsContent />
+          </TaskBarSection>
+        </>
       )}
     </div>
   );
