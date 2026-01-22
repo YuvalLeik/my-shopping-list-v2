@@ -7,6 +7,7 @@ import { fetchGroceryListsWithItemCount, GroceryListWithCount, duplicateGroceryL
 import { t } from '@/lib/translations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Drawer, DrawerContent } from '@/components/ui/drawer';
 
 interface SidebarProps {
   activeUserId: string | null;
@@ -16,9 +17,11 @@ interface SidebarProps {
   refreshTrigger?: number; // Add refresh trigger
   onListTitleUpdate?: (listId: string, newTitle: string) => Promise<void>; // Callback to update list title
   onListDuplicated?: (newListId: string, itemCount: number) => Promise<void>; // Callback when list is duplicated
+  isOpen?: boolean; // For mobile drawer
+  onClose?: () => void; // For mobile drawer
 }
 
-export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSelect, refreshTrigger, onListTitleUpdate, onListDuplicated }: SidebarProps) {
+export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSelect, refreshTrigger, onListTitleUpdate, onListDuplicated, isOpen = false, onClose }: SidebarProps) {
   const [previousLists, setPreviousLists] = useState<GroceryListWithCount[]>([]);
   const [loadingLists, setLoadingLists] = useState(false);
   const [editingListId, setEditingListId] = useState<string | null>(null);
@@ -120,11 +123,12 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
     }
   };
 
-  return (
-    <aside className="hidden md:flex w-64 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm h-screen sticky top-0 flex-col border-l border-r border-slate-200/50 dark:border-slate-800/50 shadow-lg [dir=rtl]:border-l-0 [dir=ltr]:border-r-0 overflow-y-auto">
+  // Sidebar content component (reusable for desktop and mobile)
+  const SidebarContent = () => (
+    <div className="h-full flex flex-col bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm overflow-y-auto">
       {/* Previous Lists */}
       {activeUserId && (
-        <div className="p-4 border-b border-slate-200/50 dark:border-slate-800/50 flex-1 overflow-y-auto">
+        <div className="p-4 flex-1 overflow-y-auto">
           <h2 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-100">
             {t.previousLists} ({previousLists.length})
           </h2>
@@ -199,7 +203,13 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
                         <>
                           <span
                             className="text-sm font-medium flex-1 cursor-pointer hover:underline"
-                            onClick={() => onListSelect(list.id)}
+                            onClick={() => {
+                              onListSelect(list.id);
+                              // Close drawer on mobile when selecting a list
+                              if (onClose) {
+                                onClose();
+                              }
+                            }}
                           >
                             {list.title || formatDate(list.created_at)}
                           </span>
@@ -220,7 +230,12 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
                     <div className="flex items-center justify-between w-full mt-1">
                       <span
                         className={`text-xs ${selectedListId === list.id ? 'opacity-80' : 'text-muted-foreground'}`}
-                        onClick={() => onListSelect(list.id)}
+                        onClick={() => {
+                          onListSelect(list.id);
+                          if (onClose) {
+                            onClose();
+                          }
+                        }}
                       >
                         {list.item_count} {list.item_count === 1 ? t.item : 'פריטים'}
                       </span>
@@ -252,7 +267,26 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
           )}
         </div>
       )}
+    </div>
+  );
 
-    </aside>
+  return (
+    <>
+      {/* Desktop Sidebar - Fixed */}
+      <aside className="hidden md:flex w-64 h-screen sticky top-0 flex-col border-l border-r border-slate-200/50 dark:border-slate-800/50 shadow-lg [dir=rtl]:border-l-0 [dir=ltr]:border-r-0">
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile Drawer */}
+      <Drawer open={isOpen} onOpenChange={(open) => {
+        if (!open && onClose) {
+          onClose();
+        }
+      }}>
+        <DrawerContent side="right" className="p-0 border-0">
+          <SidebarContent />
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }

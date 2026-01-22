@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ShoppingCart, List, Plus, Trash2, Upload, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, ChevronUp, User } from 'lucide-react';
+import { Loader2, ShoppingCart, List, Plus, Trash2, Upload, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, ChevronUp, User, Menu } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { AssistantPanel } from '@/app/components/AssistantPanel';
 import { t } from '@/lib/translations';
@@ -87,6 +87,7 @@ export default function Home() {
   const [showFab, setShowFab] = useState(false);
   const [sortMode, setSortMode] = useState<'category' | 'alpha'>('category');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Load all item names for autocomplete from global catalog (shopping_items)
   // This is shared across all users for learning/suggestions
@@ -637,6 +638,8 @@ export default function Home() {
         selectedListId={viewingPreviousListId} // Show which previous list is being viewed
         onListSelect={handleListSelect}
         refreshTrigger={sidebarRefreshTrigger}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
         onListTitleUpdate={async (listId: string, newTitle: string) => {
           if (!activeUserId) return;
           try {
@@ -710,8 +713,21 @@ export default function Home() {
                 )}
               </div>
               
-              {/* Left side - User Selector */}
-              <div className="flex-shrink-0">
+              {/* Left side - User Selector and Mobile Menu */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Mobile Menu Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSidebarOpen(true)}
+                  className="md:hidden rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+                  title="רשימות קודמות"
+                >
+                  <Menu className="h-4 w-4" />
+                </Button>
+                
+                {/* User Selector */}
+                <div className="flex-shrink-0">
                 {loadingUsers ? (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
                     <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
@@ -745,6 +761,7 @@ export default function Home() {
                     </SelectContent>
                   </Select>
                 ) : null}
+                </div>
               </div>
             </div>
           </div>
