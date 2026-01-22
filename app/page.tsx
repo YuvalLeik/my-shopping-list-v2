@@ -698,22 +698,22 @@ export default function Home() {
       {/* Main Content */}
       <div className="flex-1 relative min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30 dark:from-slate-950 dark:to-slate-900">
         {/* Top Bar */}
-        <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200/50 dark:border-slate-800/50">
+        <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200/50 dark:border-slate-800/50 relative">
+          {/* Mobile Hamburger Toggle Button - absolute positioning יחסית ל-top bar, מצד ימין למעלה */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="absolute top-4 right-4 md:hidden z-50 flex-shrink-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 p-2 [dir=rtl]:right-auto [dir=rtl]:left-4"
+            title="רשימות קודמות"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          
           <div className="container mx-auto px-6 py-4">
             <div className="flex items-center justify-between gap-4">
-              {/* Right side - Title with Mobile Toggle Button */}
-              <div className="flex-1 relative">
-                {/* Mobile Hamburger Toggle Button - absolute positioning במובייל, מצד ימין למעלה */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="absolute top-0 right-0 md:hidden z-50 flex-shrink-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 p-2"
-                  title="רשימות קודמות"
-                >
-                  <Menu className="h-5 w-5" />
-                </Button>
-                
+              {/* Right side - Title */}
+              <div className="flex-1">
                 {/* Title - עם padding מימין במובייל כדי לא להסתיר את הכפתור */}
                 <div className="text-right pr-12 md:pr-0">
                   <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-50">
