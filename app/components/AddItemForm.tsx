@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { Plus, Upload, Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,9 +13,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { uploadItemImage } from '@/lib/storage';
+import { updateGroceryItem } from '@/lib/groceryItems';
 
 interface AddItemFormProps {
-  onAddItem: (name: string, category: string, quantity: number, imageUrl: string | null) => Promise<void>;
+  onAddItem: (name: string, category: string, quantity: number) => Promise<string>; // Returns item id
   adding: boolean;
 }
 
@@ -40,31 +41,27 @@ export function AddItemForm({ onAddItem, adding }: AddItemFormProps) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Cleanup object URL on unmount or when image changes
+  useEffect(() => {
+    return () => {
+      if (imagePreview && imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Revoke previous URL if exists
+      if (imagePreview && imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview);
+      }
+      
       setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleUploadImage = async () => {
-    if (!imageFile) return;
-
-    try {
-      setUploadingImage(true);
-      const imageUrl = await uploadItemImage(imageFile);
-      setImagePreview(imageUrl);
-      // Image is now uploaded, we'll use the URL when submitting
-    } catch (error) {
-      console.error('Failed to upload image:', error);
-      // Continue without image - user can still add item
-    } finally {
-      setUploadingImage(false);
+      // Create preview using URL.createObjectURL
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreview(previewUrl);
     }
   };
 
@@ -72,30 +69,43 @@ export function AddItemForm({ onAddItem, adding }: AddItemFormProps) {
     e.preventDefault();
     if (!name.trim()) return;
 
-    let imageUrl: string | null = null;
-    if (imageFile && imagePreview && !imagePreview.startsWith('data:')) {
-      // Already uploaded
-      imageUrl = imagePreview;
-    } else if (imageFile) {
-      // Upload now
-      try {
-        imageUrl = await uploadItemImage(imageFile);
-      } catch (error) {
-        console.error('Failed to upload image:', error);
-        // Continue without image
+    try {
+      // Step 1: Insert item into Supabase and get id
+      const itemId = await onAddItem(name.trim(), category, quantity);
+      
+      // Step 2: If image file exists, upload it and update item
+      if (imageFile && itemId) {
+        setUploadingImage(true);
+        try {
+          const { publicUrl } = await uploadItemImage(imageFile, itemId);
+          
+          // Step 3: Update the item with image_url
+          await updateGroceryItem(itemId, { image_url: publicUrl });
+        } catch (imageError) {
+          console.error('Failed to upload image:', imageError);
+          // Continue - item was created successfully, just without image
+        } finally {
+          setUploadingImage(false);
+        }
       }
-    }
-
-    await onAddItem(name.trim(), category, quantity, imageUrl);
-    
-    // Reset form
-    setName('');
-    setCategory('ללא קטגוריה');
-    setQuantity(1);
-    setImageFile(null);
-    setImagePreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      
+      // Reset form
+      setName('');
+      setCategory('ללא קטגוריה');
+      setQuantity(1);
+      
+      // Cleanup preview URL
+      if (imagePreview && imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview);
+      }
+      setImageFile(null);
+      setImagePreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Failed to add item:', error);
+      // Error handling is done in parent component
     }
   };
 
@@ -147,36 +157,14 @@ export function AddItemForm({ onAddItem, adding }: AddItemFormProps) {
             <label className="text-sm font-medium text-slate-700 mb-2 block">
               תמונה (אופציונלי)
             </label>
-            <div className="flex gap-2">
-              <Input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageSelect}
-                className="flex-1"
-                disabled={adding || uploadingImage}
-              />
-              {imageFile && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleUploadImage}
-                  disabled={uploadingImage || adding}
-                >
-                  {uploadingImage ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin me-2" />
-                      מעלה...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4 me-2" />
-                      הוסף תמונה
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
+            <Input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="w-full"
+              disabled={adding || uploadingImage}
+            />
             {imagePreview && (
               <div className="mt-2">
                 <img
@@ -190,13 +178,13 @@ export function AddItemForm({ onAddItem, adding }: AddItemFormProps) {
 
           <Button
             type="submit"
-            disabled={!isFormValid || adding}
+            disabled={!isFormValid || adding || uploadingImage}
             className="w-full bg-purple-600 hover:bg-purple-700 text-white"
           >
-            {adding ? (
+            {adding || uploadingImage ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin me-2" />
-                מוסיף...
+                {uploadingImage ? 'מעלה תמונה...' : 'מוסיף...'}
               </>
             ) : (
               <>
