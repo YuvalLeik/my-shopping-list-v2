@@ -49,11 +49,11 @@ const DrawerContent = React.forwardRef<
 
   return (
     <DrawerPortal>
-      <DrawerOverlay />
+      <DrawerOverlay className="z-[100]" />
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          "fixed z-50 h-full w-[280px] gap-4 bg-white dark:bg-slate-900 p-0 shadow-lg transition-transform duration-300 ease-in-out",
+          "fixed z-[100] h-full w-[280px] gap-4 bg-white dark:bg-slate-900 p-0 shadow-lg transition-transform duration-300 ease-in-out",
           positionClass,
           slideClasses,
           className
