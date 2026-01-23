@@ -236,7 +236,7 @@ export async function upsertShoppingItemToCatalog(
 
     if (existing) {
       // Update existing item - prefer new category/image if provided
-      const updates: any = {};
+      const updates: { category?: string; image_url?: string } = {};
       if (category && category !== 'ללא קטגוריה' && (!existing.category || existing.category === 'ללא קטגוריה')) {
         updates.category = category;
       }

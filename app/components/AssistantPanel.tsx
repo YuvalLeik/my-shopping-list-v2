@@ -376,7 +376,7 @@ export function AssistantPanel({ userId, selectedListId, currentListItems = [], 
               onClick={handleBackToChat}
               className="mt-2 w-full"
             >
-              חזור לצ'אט
+              חזור לצ&apos;אט
             </Button>
           </div>
         )}

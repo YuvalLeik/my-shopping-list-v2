@@ -54,12 +54,18 @@ const PIE_COLORS = [
 ];
 
 // Custom tooltip style
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TooltipProps {
+  active?: boolean;
+  payload?: Array<{ name: string; value: number; color: string }>;
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white dark:bg-slate-800 p-3 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700">
         <p className="font-medium text-slate-900 dark:text-slate-100 mb-1">{label}</p>
-        {payload.map((entry: any, index: number) => (
+        {payload.map((entry, index: number) => (
           <p key={index} className="text-sm" style={{ color: entry.color }}>
             {entry.name}: {entry.value}
           </p>
@@ -71,7 +77,14 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 // Custom pie chart label
-const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, category }: any) => {
+const renderCustomizedLabel = (props: Record<string, unknown>) => {
+  const cx = (props.cx as number) ?? 0;
+  const cy = (props.cy as number) ?? 0;
+  const midAngle = (props.midAngle as number) ?? 0;
+  const innerRadius = (props.innerRadius as number) ?? 0;
+  const outerRadius = (props.outerRadius as number) ?? 0;
+  const percent = (props.percent as number) ?? 0;
+  const category = props.category as string | undefined;
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
@@ -224,7 +237,7 @@ export function Dashboard({ userId }: DashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">
-                  סה"כ פריטים שנרכשו
+                  סה&quot;כ פריטים שנרכשו
                 </p>
                 <p className="text-3xl font-bold text-emerald-900 dark:text-emerald-100">
                   {stats.totalPurchasedItems.toLocaleString()}
@@ -243,7 +256,7 @@ export function Dashboard({ userId }: DashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">
-                  סה"כ רשימות שהושלמו
+                  סה&quot;כ רשימות שהושלמו
                 </p>
                 <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
                   {stats.totalCompletedLists.toLocaleString()}
@@ -350,7 +363,7 @@ export function Dashboard({ userId }: DashboardProps) {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={renderCustomizedLabel}
+                      label={renderCustomizedLabel as (props: unknown) => React.ReactNode}
                       outerRadius="70%"
                       innerRadius="40%"
                       fill="#8884d8"
@@ -368,7 +381,7 @@ export function Dashboard({ userId }: DashboardProps) {
                       ))}
                     </Pie>
                     <Tooltip 
-                      formatter={(value: any, name: any) => [value, name]}
+                      formatter={(value: number | string | undefined, name: string | undefined) => [value ?? 0, name ?? '']}
                       contentStyle={{
                         backgroundColor: 'white',
                         border: '1px solid #e2e8f0',
@@ -473,7 +486,7 @@ export function Dashboard({ userId }: DashboardProps) {
               <div className="h-[300px] sm:h-[350px] mt-4 flex items-center justify-center">
                 <div className="text-center">
                   <p className="text-slate-500 dark:text-slate-400">
-                    אין נתונים עבור "{selectedItem}"
+                    אין נתונים עבור &quot;{selectedItem}&quot;
                   </p>
                 </div>
               </div>

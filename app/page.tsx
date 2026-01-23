@@ -1138,7 +1138,7 @@ export default function Home() {
                             <Card className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
                               <CardContent className="text-center py-8 [dir=rtl]:text-right">
                                 <p className="text-slate-600 dark:text-slate-400 mb-4">
-                                  לא נמצאו תוצאות עבור: <span className="font-semibold">"{searchQuery}"</span>
+                                  לא נמצאו תוצאות עבור: <span className="font-semibold">&quot;{searchQuery}&quot;</span>
                                 </p>
                                 <Button
                                   onClick={() => setSearchQuery('')}
