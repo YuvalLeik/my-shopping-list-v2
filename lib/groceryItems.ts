@@ -47,7 +47,7 @@ export async function createGroceryItem(
   category: string = 'ללא קטגוריה',
   image_url?: string | null
 ): Promise<GroceryItem> {
-  const insertData: Record<string, unknown> = { list_id: listId, name, quantity, category };
+  const insertData: { list_id: string; name: string; quantity: number; category: string; image_url?: string | null } = { list_id: listId, name, quantity, category };
   if (image_url !== undefined) {
     insertData.image_url = image_url;
   }

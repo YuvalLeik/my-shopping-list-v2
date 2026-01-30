@@ -697,11 +697,14 @@ export default function Home() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="absolute top-4 right-4 md:hidden z-50 flex-shrink-0 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 p-2 [dir=rtl]:right-auto [dir=rtl]:left-4"
+            onClick={() => {
+              console.log('[Mobile] Menu button clicked, current sidebarOpen:', sidebarOpen);
+              setSidebarOpen(!sidebarOpen);
+            }}
+            className="absolute top-4 right-4 md:hidden z-[100] flex-shrink-0 rounded-lg border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg hover:bg-slate-50 dark:hover:bg-slate-700 p-2 [dir=rtl]:right-auto [dir=rtl]:left-4"
             title="רשימות קודמות"
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-6 w-6 text-slate-700 dark:text-slate-200" />
           </Button>
           
           <div className="container mx-auto px-6 py-4">

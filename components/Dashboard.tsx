@@ -374,7 +374,7 @@ export function Dashboard({ userId }: DashboardProps) {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={renderCustomizedLabel}
+                      label={renderCustomizedLabel as (props: unknown) => React.ReactNode}
                       outerRadius="70%"
                       innerRadius="40%"
                       fill="#8884d8"

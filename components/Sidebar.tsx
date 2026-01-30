@@ -336,11 +336,12 @@ export function Sidebar({ activeUserId, selectedListId, onListSelect, refreshTri
 
       {/* Mobile Drawer */}
       <Drawer open={isOpen} onOpenChange={(open) => {
+        console.log('[Sidebar] Drawer onOpenChange:', open, 'isOpen:', isOpen);
         if (!open && onClose) {
           onClose();
         }
       }}>
-        <DrawerContent side="right" className="p-0 border-0">
+        <DrawerContent side="right" className="p-0 border-0 z-[100]">
           <SidebarContent />
         </DrawerContent>
       </Drawer>
