@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Plus, Loader2 } from 'lucide-react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -167,9 +168,12 @@ export function AddItemForm({ onAddItem, adding }: AddItemFormProps) {
             />
             {imagePreview && (
               <div className="mt-2">
-                <img
+                <Image
                   src={imagePreview}
                   alt="Preview"
+                  width={64}
+                  height={64}
+                  unoptimized
                   className="w-16 h-16 object-cover rounded border border-slate-200"
                 />
               </div>

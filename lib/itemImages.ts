@@ -31,7 +31,7 @@ export async function getItemImageUrlByName(name: string): Promise<string | null
     }
 
     return data?.image_url || null;
-  } catch (err) {
+  } catch {
     // Return null on any error to allow graceful fallback
     return null;
   }

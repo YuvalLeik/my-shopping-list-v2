@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Trash2, Plus, Minus, Loader2 } from 'lucide-react';
+import Image from 'next/image';
+import { Plus, Minus, Loader2 } from 'lucide-react';
 import { ShoppingItem, updateItem, deleteItem } from '@/lib/db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -177,9 +178,12 @@ export function ItemsList({ items, loading, onItemUpdate, onItemDelete, onMarkCo
                   className="flex-shrink-0"
                 />
                 {item.image_url && (
-                  <img
+                  <Image
                     src={item.image_url}
                     alt={item.name}
+                    width={48}
+                    height={48}
+                    unoptimized
                     className="w-12 h-12 object-cover rounded border border-slate-200 flex-shrink-0"
                   />
                 )}

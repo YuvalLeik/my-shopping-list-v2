@@ -23,7 +23,7 @@ interface SidebarProps {
   onClose?: () => void; // For mobile drawer
 }
 
-export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSelect, refreshTrigger, onListTitleUpdate, onListDuplicated, isOpen = false, onClose }: SidebarProps) {
+export function Sidebar({ activeUserId, selectedListId, onListSelect, refreshTrigger, onListTitleUpdate, onListDuplicated, isOpen = false, onClose }: SidebarProps) {
   // Debug: Log immediately when component mounts
   console.log('[Sidebar] Component MOUNTED/RENDERING', { 
     activeUserId, 
@@ -116,7 +116,7 @@ export function Sidebar({ activeUserId, onUserChange, selectedListId, onListSele
       if (onListDuplicated) {
         try {
           await onListDuplicated(result.list.id, result.itemCount);
-        } catch (callbackErr) {
+        } catch {
           // Callback handles its own errors, just reset state
           setDuplicatingListId(null);
           return;

@@ -30,7 +30,7 @@ export async function analyzePreviousLists(userId: string): Promise<SuggestedIte
       try {
         const items = await fetchGroceryItems(list.id, userId);
         allItems.push(...items);
-      } catch (err) {
+      } catch {
         // Silently fail - continue with other lists
       }
     }
@@ -96,7 +96,7 @@ export async function analyzePreviousLists(userId: string): Promise<SuggestedIte
 
     // Return top 10 most frequent items
     return suggestions.slice(0, 10);
-  } catch (error) {
+  } catch {
     // Error analyzing previous lists - return empty
     return [];
   }
@@ -143,7 +143,7 @@ export async function findMissingItems(userId: string, currentListId: string): P
       try {
         const items = await fetchGroceryItems(list.id, userId);
         allItems.push(...items);
-      } catch (err) {
+      } catch {
         // Silently fail - continue with other lists
       }
     }
@@ -205,7 +205,7 @@ export async function findMissingItems(userId: string, currentListId: string): P
       });
 
     return suggestions.slice(0, 15); // Return more items for missing items
-  } catch (error) {
+  } catch {
     // Error finding missing items - return empty
     return [];
   }
@@ -374,7 +374,7 @@ export async function getMostRecentCompletedList(userId: string): Promise<{ list
       listId: mostRecentList.id,
       items,
     };
-  } catch (error) {
+  } catch {
     // Error getting most recent completed list - return null
     return null;
   }
@@ -399,7 +399,7 @@ export async function getItemsByCategory(userId: string, category: string): Prom
       try {
         const items = await fetchGroceryItems(list.id, userId);
         allItems.push(...items);
-      } catch (err) {
+      } catch {
         // Silently fail - continue with other lists
       }
     }
@@ -457,7 +457,7 @@ export async function getItemsByCategory(userId: string, category: string): Prom
       });
 
     return suggestions;
-  } catch (error) {
+  } catch {
     // Error getting items by category - return empty
     return [];
   }

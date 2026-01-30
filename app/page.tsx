@@ -8,7 +8,7 @@ import { uploadItemImage } from '@/lib/storage';
 import { getShoppingItemByName, upsertShoppingItemImageByName, normalizeItemName } from '@/lib/shoppingItems';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ShoppingCart, List, Plus, Trash2, Upload, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, ChevronUp, User, Menu } from 'lucide-react';
+import { Loader2, ShoppingCart, Plus, Trash2, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, User, Menu } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { AssistantPanel } from '@/app/components/AssistantPanel';
 import { t } from '@/lib/translations';
@@ -55,11 +55,9 @@ export default function Home() {
   const [newItemName, setNewItemName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('ללא קטגוריה');
   const [newItemQuantity, setNewItemQuantity] = useState(1);
-  const [loadingLists, setLoadingLists] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
   const [addingItem, setAddingItem] = useState(false);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
-  const [deletingListId, setDeletingListId] = useState<string | null>(null);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [allItemNames, setAllItemNames] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -103,7 +101,7 @@ export default function Home() {
         const names = await getAllItemNames(userId);
         setAllItemNames(names);
       } catch (err) {
-        // Silently fail - autocomplete is not critical
+        console.error('Failed to load item names:', err);
       }
     }
     loadItemNames();
@@ -174,7 +172,6 @@ export default function Home() {
     }
 
     const userId = activeUserId;
-    setLoadingLists(true);
     async function loadLists() {
       try {
         const loadedLists = await fetchGroceryLists(userId);
@@ -200,16 +197,13 @@ export default function Home() {
             setListTitle('');
           }
         }
-      } catch (err) {
-        toast.error(t.failedToLoadLists, {
-          description: err instanceof Error ? err.message : 'Unknown error',
-        });
-      } finally {
-        setLoadingLists(false);
-      }
+    } catch (err) {
+      toast.error(t.failedToLoadLists, {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
     }
     loadLists();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUserId]);
 
   // Load items when selected list changes
@@ -355,7 +349,7 @@ export default function Home() {
           try {
             const updatedItem = await updateGroceryItem(newItem.id, { image_url: publicUrl });
             newItem = updatedItem; // Update local reference
-          } catch (updateError) {
+          } catch {
             // Image uploaded but couldn't update DB - not critical, continue
           }
           
@@ -379,7 +373,7 @@ export default function Home() {
       try {
         const loadedItems = await fetchGroceryItems(selectedListId, userId);
         setItems(loadedItems);
-      } catch (refreshError) {
+      } catch {
         // Refresh failed - still update state with the item we created
         setItems((prev) => [newItem, ...prev.filter(i => i.id !== newItem.id)]);
       }
@@ -420,7 +414,7 @@ export default function Home() {
       if (foundCategory) {
         setNewItemCategory(foundCategory);
       }
-    } catch (err) {
+    } catch {
       // Failed to get category - keep current category
     }
   };
@@ -1135,7 +1129,7 @@ export default function Home() {
                             <Card className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
                               <CardContent className="text-center py-8 [dir=rtl]:text-right">
                                 <p className="text-slate-600 dark:text-slate-400 mb-4">
-                                  לא נמצאו תוצאות עבור: <span className="font-semibold">"{searchQuery}"</span>
+                                  לא נמצאו תוצאות עבור: <span className="font-semibold">&quot;{searchQuery}&quot;</span>
                                 </p>
                                 <Button
                                   onClick={() => setSearchQuery('')}
@@ -1661,6 +1655,15 @@ export default function Home() {
             <Plus className="h-6 w-6" />
           </button>
         )}
+
+        {/* Floating sidebar toggle - Mobile only */}
+        <button
+          onClick={() => setSidebarOpen((prev) => !prev)}
+          className="fixed bottom-6 left-6 z-50 w-14 h-14 rounded-full bg-slate-600 hover:bg-slate-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center [dir=rtl]:left-auto [dir=rtl]:right-6 md:hidden"
+          aria-label="רשימות קודמות"
+        >
+          <Menu className="h-6 w-6" />
+        </button>
       </div>
 
       {/* Complete List Confirmation Dialog */}
@@ -1736,7 +1739,7 @@ export default function Home() {
               try {
                 const loadedItems = await fetchGroceryItems(selectedListId, activeUserId);
                 setItems(loadedItems);
-              } catch (err) {
+              } catch {
                 // Failed to reload items - error already handled
               }
             }

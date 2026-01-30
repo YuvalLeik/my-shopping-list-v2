@@ -52,7 +52,7 @@ export async function getShoppingItemByName(name: string): Promise<ShoppingItemC
       image_url: data.image_url,
       category: data.category || null,
     };
-  } catch (err) {
+  } catch {
     // Return null on any error to allow graceful fallback
     return null;
   }
@@ -132,7 +132,7 @@ export async function getShoppingItemsByCategory(category: string): Promise<Shop
     });
 
     return items;
-  } catch (err) {
+  } catch {
     return [];
   }
 }
@@ -147,7 +147,7 @@ export async function getShoppingItemsDiagnostics(): Promise<{
 }> {
   try {
     // Get total count
-    const { count, error: countError } = await supabase
+    const { count } = await supabase
       .from('shopping_items')
       .select('*', { count: 'exact', head: true });
 
@@ -176,7 +176,7 @@ export async function getShoppingItemsDiagnostics(): Promise<{
       .slice(0, 5);
 
     return { totalCount, topCategories };
-  } catch (err) {
+  } catch {
     return { totalCount: 0, topCategories: [] };
   }
 }
@@ -236,7 +236,7 @@ export async function upsertShoppingItemToCatalog(
 
     if (existing) {
       // Update existing item - prefer new category/image if provided
-      const updates: any = {};
+      const updates: Record<string, unknown> = {};
       if (category && category !== 'ללא קטגוריה' && (!existing.category || existing.category === 'ללא קטגוריה')) {
         updates.category = category;
       }
@@ -263,7 +263,7 @@ export async function upsertShoppingItemToCatalog(
           purchased: false,
         });
     }
-  } catch (err) {
+  } catch {
     // Silently fail - don't break item creation
   }
 }
@@ -508,7 +508,7 @@ export async function upsertShoppingItemImageByName(name: string, imageUrl: stri
       }
 
       // Try to insert new item
-      const { data: insertedItem, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('shopping_items')
         .insert({
           list_id: listId,
@@ -555,7 +555,7 @@ export async function upsertShoppingItemImageByName(name: string, imageUrl: stri
         }
       }
     }
-  } catch (err) {
+  } catch {
     // Don't throw - image upload should still succeed even if catalog save fails
     // The error will be logged by the caller if needed
   }

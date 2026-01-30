@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Calendar } from 'lucide-react';
 import { getLists, ShoppingListWithItemCount, formatDateDisplay } from '@/lib/db';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface PreviousListsSidebarProps {

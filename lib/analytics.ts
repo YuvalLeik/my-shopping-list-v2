@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { GroceryItem } from './groceryItems';
 
 export interface TopItem {
   name: string;

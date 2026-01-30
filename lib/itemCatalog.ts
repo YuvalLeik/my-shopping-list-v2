@@ -32,7 +32,7 @@ export async function getItemImage(name: string): Promise<string | null> {
     }
 
     return data?.image_url || null;
-  } catch (err) {
+  } catch {
     // Return null on any error to allow graceful fallback
     return null;
   }
@@ -63,7 +63,7 @@ export async function upsertItemImage(name: string, image_url: string): Promise<
     if (error) {
       throw new Error(`Failed to upsert item image: ${error.message}`);
     }
-  } catch (err) {
+  } catch {
     // Don't throw - image upload should still succeed even if global save fails
     // The error will be logged by the caller if needed
   }

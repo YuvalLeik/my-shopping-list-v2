@@ -47,7 +47,7 @@ export async function createGroceryItem(
   category: string = 'ללא קטגוריה',
   image_url?: string | null
 ): Promise<GroceryItem> {
-  const insertData: any = { list_id: listId, name, quantity, category };
+  const insertData: Record<string, unknown> = { list_id: listId, name, quantity, category };
   if (image_url !== undefined) {
     insertData.image_url = image_url;
   }
@@ -75,6 +75,7 @@ export async function createGroceryItem(
 // Get category for an item by name from global catalog (shopping_items)
 // This is shared across all users for learning
 export async function getItemCategoryByName(itemName: string, userId: string): Promise<string | null> {
+  void userId; // Reserved for future per-user filtering
   try {
     // Use global shopping_items catalog (not filtered by user_id)
     const { data, error } = await supabase
@@ -90,7 +91,7 @@ export async function getItemCategoryByName(itemName: string, userId: string): P
     }
 
     return data[0]?.category || null;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -137,6 +138,7 @@ export async function fetchGroceryItemById(itemId: string): Promise<GroceryItem>
 // Get all unique item names from global catalog (shopping_items) for autocomplete
 // This is shared across all users for learning/suggestions
 export async function getAllItemNames(userId: string): Promise<string[]> {
+  void userId; // Reserved for future per-user filtering
   // Use global shopping_items catalog (not filtered by user_id)
   const { data, error } = await supabase
     .from('shopping_items')

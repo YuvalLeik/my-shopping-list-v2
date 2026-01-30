@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { X, Send, Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,7 +49,7 @@ export function AssistantPanel({ userId, selectedListId, currentListItems = [], 
     if (state === 'CHOOSING_CATEGORY' && categories.length === 0) {
       loadCategories();
     }
-  }, [state]);
+  }, [state, categories.length]);
 
   const loadCategories = async () => {
     setLoading(true);
@@ -376,7 +377,7 @@ export function AssistantPanel({ userId, selectedListId, currentListItems = [], 
               onClick={handleBackToChat}
               className="mt-2 w-full"
             >
-              חזור לצ'אט
+              חזור לצ&apos;אט
             </Button>
           </div>
         )}
@@ -396,9 +397,12 @@ export function AssistantPanel({ userId, selectedListId, currentListItems = [], 
                   >
                     <div className="flex items-center gap-2 flex-1 [dir=rtl]:flex-row-reverse">
                       {item.image_url ? (
-                        <img
+                        <Image
                           src={item.image_url}
                           alt={item.name}
+                          width={32}
+                          height={32}
+                          unoptimized
                           className="w-8 h-8 rounded object-cover flex-shrink-0"
                         />
                       ) : (
@@ -464,9 +468,12 @@ export function AssistantPanel({ userId, selectedListId, currentListItems = [], 
                 >
                   <div className="flex items-center gap-2 flex-1 [dir=rtl]:flex-row-reverse">
                     {item.image_url ? (
-                      <img
+                      <Image
                         src={item.image_url}
                         alt={item.name}
+                        width={32}
+                        height={32}
+                        unoptimized
                         className="w-8 h-8 rounded object-cover flex-shrink-0"
                       />
                     ) : (
