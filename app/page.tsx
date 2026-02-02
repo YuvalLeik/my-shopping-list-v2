@@ -1179,7 +1179,7 @@ export default function Home() {
                                       {categoryItems.map((item) => (
                                   <li
                                     key={item.id}
-                                    className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
+                                    className="flex flex-wrap items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
                                   >
                                     {/* Checkbox */}
                                     <input
@@ -1187,7 +1187,7 @@ export default function Home() {
                                       checked={item.purchased || false}
                                       onChange={() => handleTogglePurchased(item)}
                                       disabled={updatingItemId === item.id}
-                                      className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                      className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
                                     />
                                     
                                     {/* Image placeholder */}
@@ -1229,55 +1229,55 @@ export default function Home() {
                                       </label>
                                     </div>
                                     
-                                    {/* Item name */}
-                                    <div className="flex-1 text-right min-w-0">
-                                      <div className="font-medium text-slate-700 dark:text-slate-200">
+                                    {/* Item name - takes remaining space, wraps below on mobile if needed */}
+                                    <div className="flex-1 min-w-0 text-right overflow-hidden">
+                                      <div className="font-medium text-slate-700 dark:text-slate-200 truncate">
                                         {item.name}
                                       </div>
-                                      <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                      <div className="text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">
                                         {item.category || 'ללא קטגוריה'}
                                       </div>
                                     </div>
                                     
-                                    {/* Quantity controls */}
-                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                    {/* Quantity controls + Delete - own row on mobile to avoid overlap */}
+                                    <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-end [dir=rtl]:justify-start">
+                                      <div className="flex items-center gap-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleQuantityChange(item, -1)}
+                                          disabled={item.quantity <= 1 || updatingItemId === item.id}
+                                          className="h-8 w-8 p-0"
+                                        >
+                                          <Minus className="h-4 w-4" />
+                                        </Button>
+                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200 w-8 text-center">
+                                          {item.quantity}
+                                        </span>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleQuantityChange(item, 1)}
+                                          disabled={updatingItemId === item.id}
+                                          className="h-8 w-8 p-0"
+                                        >
+                                          <Plus className="h-4 w-4" />
+                                        </Button>
+                                      </div>
                                       <Button
-                                        variant="outline"
+                                        variant="ghost"
                                         size="sm"
-                                        onClick={() => handleQuantityChange(item, -1)}
-                                        disabled={item.quantity <= 1 || updatingItemId === item.id}
-                                        className="h-8 w-8 p-0"
+                                        onClick={() => handleDeleteItem(item.id)}
+                                        disabled={deletingItemId === item.id}
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
                                       >
-                                        <Minus className="h-4 w-4" />
-                                      </Button>
-                                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200 w-8 text-center">
-                                        {item.quantity}
-                                      </span>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleQuantityChange(item, 1)}
-                                        disabled={updatingItemId === item.id}
-                                        className="h-8 w-8 p-0"
-                                      >
-                                        <Plus className="h-4 w-4" />
+                                        {deletingItemId === item.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          t.delete
+                                        )}
                                       </Button>
                                     </div>
-                                    
-                                    {/* Delete button */}
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDeleteItem(item.id)}
-                                      disabled={deletingItemId === item.id}
-                                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
-                                    >
-                                      {deletingItemId === item.id ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        t.delete
-                                      )}
-                                    </Button>
                                         </li>
                                       ))}
                                     </ul>
@@ -1289,7 +1289,7 @@ export default function Home() {
                                   {groupedNotPurchased['כל הפריטים']?.map((item) => (
                                     <li
                                       key={item.id}
-                                      className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
+                                      className="flex flex-wrap items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
                                     >
                                       {/* Checkbox */}
                                       <input
@@ -1297,7 +1297,7 @@ export default function Home() {
                                         checked={item.purchased || false}
                                         onChange={() => handleTogglePurchased(item)}
                                         disabled={updatingItemId === item.id}
-                                        className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                        className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
                                       />
                                       
                                       {/* Image placeholder */}
@@ -1338,55 +1338,55 @@ export default function Home() {
                                         </label>
                                       </div>
                                       
-                                      {/* Item name */}
-                                      <div className="flex-1 text-right min-w-0">
-                                        <div className="font-medium text-slate-700 dark:text-slate-200">
+                                      {/* Item name - takes remaining space */}
+                                      <div className="flex-1 min-w-0 text-right overflow-hidden">
+                                        <div className="font-medium text-slate-700 dark:text-slate-200 truncate">
                                           {item.name}
                                         </div>
-                                        <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                        <div className="text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">
                                           {item.category || 'ללא קטגוריה'}
                                         </div>
                                       </div>
                                       
-                                      {/* Quantity controls */}
-                                      <div className="flex items-center gap-2 flex-shrink-0">
+                                      {/* Quantity controls + Delete - own row on mobile to avoid overlap */}
+                                      <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-end [dir=rtl]:justify-start">
+                                        <div className="flex items-center gap-2">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleQuantityChange(item, -1)}
+                                            disabled={item.quantity <= 1 || updatingItemId === item.id}
+                                            className="h-8 w-8 p-0"
+                                          >
+                                            <Minus className="h-4 w-4" />
+                                          </Button>
+                                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200 w-8 text-center">
+                                            {item.quantity}
+                                          </span>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleQuantityChange(item, 1)}
+                                            disabled={updatingItemId === item.id}
+                                            className="h-8 w-8 p-0"
+                                          >
+                                            <Plus className="h-4 w-4" />
+                                          </Button>
+                                        </div>
                                         <Button
-                                          variant="outline"
+                                          variant="ghost"
                                           size="sm"
-                                          onClick={() => handleQuantityChange(item, -1)}
-                                          disabled={item.quantity <= 1 || updatingItemId === item.id}
-                                          className="h-8 w-8 p-0"
+                                          onClick={() => handleDeleteItem(item.id)}
+                                          disabled={deletingItemId === item.id}
+                                          className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
                                         >
-                                          <Minus className="h-4 w-4" />
-                                        </Button>
-                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200 w-8 text-center">
-                                          {item.quantity}
-                                        </span>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => handleQuantityChange(item, 1)}
-                                          disabled={updatingItemId === item.id}
-                                          className="h-8 w-8 p-0"
-                                        >
-                                          <Plus className="h-4 w-4" />
+                                          {deletingItemId === item.id ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            t.delete
+                                          )}
                                         </Button>
                                       </div>
-                                      
-                                      {/* Delete button */}
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleDeleteItem(item.id)}
-                                        disabled={deletingItemId === item.id}
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
-                                      >
-                                        {deletingItemId === item.id ? (
-                                          <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                          t.delete
-                                        )}
-                                      </Button>
                                     </li>
                                   ))}
                                 </ul>
