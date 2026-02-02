@@ -1359,16 +1359,6 @@ export default function Home() {
                                     key={item.id}
                                     className="flex flex-wrap items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
                                   >
-                                    {/* Selection checkbox for bulk actions */}
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedItemIds.has(item.id)}
-                                      onChange={() => toggleItemSelection(item.id)}
-                                      disabled={bulkDeleting}
-                                      className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
-                                      title={t.selectAll}
-                                      aria-label={t.selectAll}
-                                    />
                                     {/* Purchased checkbox */}
                                     <input
                                       type="checkbox"
@@ -1479,15 +1469,6 @@ export default function Home() {
                                       key={item.id}
                                       className="flex flex-wrap items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
                                     >
-                                      {/* Selection checkbox for bulk actions */}
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedItemIds.has(item.id)}
-                                        onChange={() => toggleItemSelection(item.id)}
-                                        disabled={bulkDeleting}
-                                        className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
-                                        aria-label={t.selectAll}
-                                      />
                                       {/* Purchased checkbox */}
                                       <input
                                         type="checkbox"
@@ -1625,15 +1606,6 @@ export default function Home() {
                                           key={item.id}
                                           className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-75 [dir=rtl]:flex-row-reverse"
                                         >
-                                          {/* Selection checkbox for bulk actions */}
-                                          <input
-                                            type="checkbox"
-                                            checked={selectedItemIds.has(item.id)}
-                                            onChange={() => toggleItemSelection(item.id)}
-                                            disabled={bulkDeleting}
-                                            className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
-                                            aria-label={t.selectAll}
-                                          />
                                           {/* Checkbox - can be unchecked to return item to active list */}
                                           <input
                                             type="checkbox"
@@ -1685,15 +1657,6 @@ export default function Home() {
                                       key={item.id}
                                       className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-75 [dir=rtl]:flex-row-reverse"
                                     >
-                                      {/* Selection checkbox for bulk actions */}
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedItemIds.has(item.id)}
-                                        onChange={() => toggleItemSelection(item.id)}
-                                        disabled={bulkDeleting}
-                                        className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
-                                        aria-label={t.selectAll}
-                                      />
                                       {/* Checkbox - can be unchecked to return item to active list */}
                                       <input
                                         type="checkbox"
