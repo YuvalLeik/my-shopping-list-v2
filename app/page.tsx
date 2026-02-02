@@ -87,6 +87,9 @@ export default function Home() {
   const [sortMode, setSortMode] = useState<'category' | 'alpha'>('category');
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   // Load all item names for autocomplete from global catalog (shopping_items)
   // This is shared across all users for learning/suggestions
@@ -211,6 +214,7 @@ export default function Home() {
 
   // Load items when selected list changes
   useEffect(() => {
+    setSelectedItemIds(new Set());
     if (!selectedListId) {
       setItems([]);
       return;
@@ -437,6 +441,45 @@ export default function Home() {
       });
     } finally {
       setDeletingItemId(null);
+    }
+  };
+
+  const toggleItemSelection = (id: string) => {
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllVisible = (filteredItemIds: string[]) => {
+    setSelectedItemIds(new Set(filteredItemIds));
+  };
+
+  const clearSelection = () => {
+    setSelectedItemIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedItemIds.size === 0) return;
+    setShowBulkDeleteConfirm(false);
+    setBulkDeleting(true);
+    const idsToDelete = Array.from(selectedItemIds);
+    try {
+      for (const id of idsToDelete) {
+        await deleteGroceryItem(id);
+      }
+      setItems((prev) => prev.filter((i) => !selectedItemIds.has(i.id)));
+      setSelectedItemIds(new Set());
+      const n = idsToDelete.length;
+      toast.success(t.itemsDeleted(n));
+    } catch (err) {
+      toast.error(t.failedToDeleteItem, {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -1215,6 +1258,51 @@ export default function Home() {
                                 </SelectContent>
                               </Select>
                             </div>
+                            {filteredItems.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 [dir=rtl]:flex-row-reverse">
+                                <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400">
+                                  <input
+                                    type="checkbox"
+                                    checked={filteredItems.length > 0 && filteredItems.every((i) => selectedItemIds.has(i.id))}
+                                    onChange={() => {
+                                      if (filteredItems.every((i) => selectedItemIds.has(i.id))) {
+                                        clearSelection();
+                                      } else {
+                                        selectAllVisible(filteredItems.map((i) => i.id));
+                                      }
+                                    }}
+                                    disabled={bulkDeleting}
+                                    className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500"
+                                  />
+                                  {t.selectAll}
+                                </label>
+                                {selectedItemIds.size > 0 && (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setShowBulkDeleteConfirm(true)}
+                                      disabled={bulkDeleting}
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-800"
+                                    >
+                                      {bulkDeleting ? (
+                                        <Loader2 className="h-4 w-4 animate-spin me-2" />
+                                      ) : null}
+                                      {t.deleteSelected(selectedItemIds.size)}
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={clearSelection}
+                                      disabled={bulkDeleting}
+                                      className="text-slate-600 dark:text-slate-400"
+                                    >
+                                      {t.clearSelection}
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
                           
                           {/* Empty States */}
@@ -1271,7 +1359,17 @@ export default function Home() {
                                     key={item.id}
                                     className="flex flex-wrap items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
                                   >
-                                    {/* Checkbox */}
+                                    {/* Selection checkbox for bulk actions */}
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedItemIds.has(item.id)}
+                                      onChange={() => toggleItemSelection(item.id)}
+                                      disabled={bulkDeleting}
+                                      className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
+                                      title={t.selectAll}
+                                      aria-label={t.selectAll}
+                                    />
+                                    {/* Purchased checkbox */}
                                     <input
                                       type="checkbox"
                                       checked={item.purchased || false}
@@ -1358,7 +1456,7 @@ export default function Home() {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => handleDeleteItem(item.id)}
-                                        disabled={deletingItemId === item.id}
+                                        disabled={deletingItemId === item.id || bulkDeleting}
                                         className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
                                       >
                                         {deletingItemId === item.id ? (
@@ -1381,7 +1479,16 @@ export default function Home() {
                                       key={item.id}
                                       className="flex flex-wrap items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
                                     >
-                                      {/* Checkbox */}
+                                      {/* Selection checkbox for bulk actions */}
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedItemIds.has(item.id)}
+                                        onChange={() => toggleItemSelection(item.id)}
+                                        disabled={bulkDeleting}
+                                        className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
+                                        aria-label={t.selectAll}
+                                      />
+                                      {/* Purchased checkbox */}
                                       <input
                                         type="checkbox"
                                         checked={item.purchased || false}
@@ -1467,7 +1574,7 @@ export default function Home() {
                                           variant="ghost"
                                           size="sm"
                                           onClick={() => handleDeleteItem(item.id)}
-                                          disabled={deletingItemId === item.id}
+                                          disabled={deletingItemId === item.id || bulkDeleting}
                                           className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
                                         >
                                           {deletingItemId === item.id ? (
@@ -1518,6 +1625,15 @@ export default function Home() {
                                           key={item.id}
                                           className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-75 [dir=rtl]:flex-row-reverse"
                                         >
+                                          {/* Selection checkbox for bulk actions */}
+                                          <input
+                                            type="checkbox"
+                                            checked={selectedItemIds.has(item.id)}
+                                            onChange={() => toggleItemSelection(item.id)}
+                                            disabled={bulkDeleting}
+                                            className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
+                                            aria-label={t.selectAll}
+                                          />
                                           {/* Checkbox - can be unchecked to return item to active list */}
                                           <input
                                             type="checkbox"
@@ -1569,6 +1685,15 @@ export default function Home() {
                                       key={item.id}
                                       className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-75 [dir=rtl]:flex-row-reverse"
                                     >
+                                      {/* Selection checkbox for bulk actions */}
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedItemIds.has(item.id)}
+                                        onChange={() => toggleItemSelection(item.id)}
+                                        disabled={bulkDeleting}
+                                        className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
+                                        aria-label={t.selectAll}
+                                      />
                                       {/* Checkbox - can be unchecked to return item to active list */}
                                       <input
                                         type="checkbox"
@@ -1609,14 +1734,14 @@ export default function Home() {
                                       </div>
                                     </li>
                                   ))}
-                                  </ul>
-                                )}
-                              </div>
+                                </ul>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })()}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   </CardContent>
                 </Card>
               </div>
@@ -1718,6 +1843,35 @@ export default function Home() {
               className="bg-red-600 hover:bg-red-700"
             >
               {t.delete}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Selected Items Confirmation Dialog */}
+      <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
+        <AlertDialogContent className="[dir=rtl]:text-right">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.delete}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.confirmDeleteSelected(selectedItemIds.size)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="[dir=rtl]:flex-row-reverse">
+            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={bulkDeleting}
+            >
+              {bulkDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin me-2" />
+                  {t.delete}
+                </>
+              ) : (
+                t.delete
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -63,4 +63,9 @@ export const t = {
   closePreviousList: 'סגור',
   deletePreviousList: 'מחק רשימה',
   confirmDeletePreviousList: 'האם אתה בטוח שברצונך למחוק את הרשימה הקודמת?',
+  selectAll: 'בחר הכל',
+  clearSelection: 'נקה בחירה',
+  deleteSelected: (n: number) => `מחק נבחרים (${n})`,
+  confirmDeleteSelected: (n: number) => `למחוק ${n} פריטים?`,
+  itemsDeleted: (n: number) => `${n} פריטים נמחקו`,
 };
