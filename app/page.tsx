@@ -88,6 +88,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [selectionModeActive, setSelectionModeActive] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
@@ -215,6 +216,7 @@ export default function Home() {
   // Load items when selected list changes
   useEffect(() => {
     setSelectedItemIds(new Set());
+    setSelectionModeActive(false);
     if (!selectedListId) {
       setItems([]);
       return;
@@ -459,6 +461,7 @@ export default function Home() {
 
   const clearSelection = () => {
     setSelectedItemIds(new Set());
+    setSelectionModeActive(false);
   };
 
   const handleBulkDelete = async () => {
@@ -472,6 +475,7 @@ export default function Home() {
       }
       setItems((prev) => prev.filter((i) => !selectedItemIds.has(i.id)));
       setSelectedItemIds(new Set());
+      setSelectionModeActive(false);
       const n = idsToDelete.length;
       toast.success(t.itemsDeleted(n));
     } catch (err) {
@@ -1269,6 +1273,7 @@ export default function Home() {
                                         clearSelection();
                                       } else {
                                         selectAllVisible(filteredItems.map((i) => i.id));
+                                        setSelectionModeActive(true);
                                       }
                                     }}
                                     disabled={bulkDeleting}
@@ -1359,15 +1364,16 @@ export default function Home() {
                                     key={item.id}
                                     className="flex flex-wrap items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
                                   >
-                                    {/* Selection checkbox – reflects Select all / bulk delete */}
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedItemIds.has(item.id)}
-                                      onChange={() => toggleItemSelection(item.id)}
-                                      disabled={bulkDeleting}
-                                      className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
-                                      aria-label={t.selectAll}
-                                    />
+                                    {selectionModeActive && (
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedItemIds.has(item.id)}
+                                        onChange={() => toggleItemSelection(item.id)}
+                                        disabled={bulkDeleting}
+                                        className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
+                                        aria-label={t.selectAll}
+                                      />
+                                    )}
                                     {/* Purchased checkbox */}
                                     <input
                                       type="checkbox"
@@ -1478,15 +1484,16 @@ export default function Home() {
                                       key={item.id}
                                       className="flex flex-wrap items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
                                     >
-                                      {/* Selection checkbox – reflects Select all / bulk delete */}
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedItemIds.has(item.id)}
-                                        onChange={() => toggleItemSelection(item.id)}
-                                        disabled={bulkDeleting}
-                                        className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
-                                        aria-label={t.selectAll}
-                                      />
+                                      {selectionModeActive && (
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedItemIds.has(item.id)}
+                                          onChange={() => toggleItemSelection(item.id)}
+                                          disabled={bulkDeleting}
+                                          className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
+                                          aria-label={t.selectAll}
+                                        />
+                                      )}
                                       {/* Purchased checkbox */}
                                       <input
                                         type="checkbox"
@@ -1624,15 +1631,16 @@ export default function Home() {
                                           key={item.id}
                                           className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-75 [dir=rtl]:flex-row-reverse"
                                         >
-                                          {/* Selection checkbox – reflects Select all / bulk delete */}
-                                          <input
-                                            type="checkbox"
-                                            checked={selectedItemIds.has(item.id)}
-                                            onChange={() => toggleItemSelection(item.id)}
-                                            disabled={bulkDeleting}
-                                            className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
-                                            aria-label={t.selectAll}
-                                          />
+                                          {selectionModeActive && (
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedItemIds.has(item.id)}
+                                              onChange={() => toggleItemSelection(item.id)}
+                                              disabled={bulkDeleting}
+                                              className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
+                                              aria-label={t.selectAll}
+                                            />
+                                          )}
                                           {/* Checkbox - can be unchecked to return item to active list */}
                                           <input
                                             type="checkbox"
@@ -1676,23 +1684,24 @@ export default function Home() {
                                     </ul>
                                   </div>
                                 ))
-                                ) : (
-                                  // Alphabetical list for purchased items
-                                  <ul className="space-y-3">
+                              ) : (
+                                // Alphabetical list for purchased items
+                                <ul className="space-y-3">
                                   {groupedPurchased['כל הפריטים']?.map((item) => (
                                     <li
                                       key={item.id}
                                       className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-75 [dir=rtl]:flex-row-reverse"
                                     >
-                                      {/* Selection checkbox – reflects Select all / bulk delete */}
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedItemIds.has(item.id)}
-                                        onChange={() => toggleItemSelection(item.id)}
-                                        disabled={bulkDeleting}
-                                        className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
-                                        aria-label={t.selectAll}
-                                      />
+                                      {selectionModeActive && (
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedItemIds.has(item.id)}
+                                          onChange={() => toggleItemSelection(item.id)}
+                                          disabled={bulkDeleting}
+                                          className="w-4 h-4 rounded border-slate-400 text-slate-600 focus:ring-slate-500 cursor-pointer flex-shrink-0"
+                                          aria-label={t.selectAll}
+                                        />
+                                      )}
                                       {/* Checkbox - can be unchecked to return item to active list */}
                                       <input
                                         type="checkbox"
