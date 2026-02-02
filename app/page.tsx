@@ -113,22 +113,24 @@ export default function Home() {
       try {
         const loadedUsers = await fetchLocalUsers();
         setUsers(loadedUsers);
-        
-        // Load active user from localStorage if not set
-        if (!activeUserId && loadedUsers.length > 0) {
-          const storedUserId = localStorage.getItem('active_user_id');
-          if (storedUserId && loadedUsers.find(u => u.id === storedUserId)) {
-            setActiveUserId(storedUserId);
-          } else {
-            // Auto-select first user if none selected
-            setActiveUserId(loadedUsers[0].id);
-            localStorage.setItem('active_user_id', loadedUsers[0].id);
-          }
+
+        if (loadedUsers.length === 0) {
+          setLoadingUsers(false);
+          return;
         }
-        
-        // Update active user name if user is selected
-        if (activeUserId) {
-          const activeUser = loadedUsers.find(u => u.id === activeUserId);
+
+        const storedUserId = localStorage.getItem('active_user_id');
+        const validStored = storedUserId && loadedUsers.some((u) => u.id === storedUserId);
+        const currentValid = activeUserId && loadedUsers.some((u) => u.id === activeUserId);
+
+        if (!currentValid) {
+          const nextId = validStored ? storedUserId! : loadedUsers[0].id;
+          setActiveUserId(nextId);
+          localStorage.setItem('active_user_id', nextId);
+          const user = loadedUsers.find((u) => u.id === nextId);
+          setActiveUserName(user?.name || null);
+        } else if (activeUserId) {
+          const activeUser = loadedUsers.find((u) => u.id === activeUserId);
           setActiveUserName(activeUser?.name || null);
         }
       } catch (err) {
@@ -724,10 +726,9 @@ export default function Home() {
                 </div>
               </div>
               
-              {/* Left side - User Selector */}
+              {/* Left side - User Selector (visible on all screen sizes) */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* User Selector - מוסתר במובייל, מופיע בדסקטופ */}
-                <div className="hidden md:flex flex-shrink-0 items-center">
+                <div className="flex flex-shrink-0 items-center">
                 {loadingUsers ? (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
                     <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
@@ -736,23 +737,23 @@ export default function Home() {
                   <div className="px-3 py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm text-sm text-slate-600 dark:text-slate-400">
                     אין משתמשים
                   </div>
-                ) : activeUserId ? (
+                ) : users.length > 0 ? (
                   <Select
-                    value={activeUserId}
+                    value={users.some((u) => u.id === activeUserId) ? activeUserId ?? '' : users[0].id}
                     onValueChange={(userId) => {
                       setActiveUserId(userId);
                       localStorage.setItem('active_user_id', userId);
                     }}
                   >
-                    <SelectTrigger className="flex items-center gap-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors [dir=rtl]:flex-row-reverse w-auto md:min-w-[160px]">
+                    <SelectTrigger className="flex items-center gap-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors [dir=rtl]:flex-row-reverse w-auto min-w-[120px] md:min-w-[160px]">
                       <User className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                      <div className="flex flex-col items-start [dir=rtl]:items-end">
+                      <div className="flex flex-col items-start [dir=rtl]:items-end min-w-0">
                         <span className="text-xs text-slate-500 dark:text-slate-400 leading-none">משתמש</span>
                         <SelectValue className="text-sm font-medium text-slate-900 dark:text-slate-50 leading-tight" />
                       </div>
                       <ChevronDown className="h-4 w-4 text-slate-500 dark:text-slate-400 flex-shrink-0 [dir=rtl]:mr-auto [dir=ltr]:ml-auto" />
                     </SelectTrigger>
-                    <SelectContent position="popper" className="z-[100] min-w-[200px]">
+                    <SelectContent position="popper" className="z-[200] min-w-[200px]" sideOffset={4}>
                       {users.map((user) => (
                         <SelectItem key={user.id} value={user.id}>
                           {user.name}
