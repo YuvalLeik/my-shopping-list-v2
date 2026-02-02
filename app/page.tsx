@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2, ShoppingCart, Plus, Trash2, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, User, Menu } from 'lucide-react';
+import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { Sidebar } from '@/components/Sidebar';
 import { AssistantPanel } from '@/app/components/AssistantPanel';
 import { t } from '@/lib/translations';
@@ -625,6 +626,94 @@ export default function Home() {
     }
   };
 
+  // Reusable prior list Card content (desktop inline + mobile drawer)
+  const previousListCardContent = (
+    <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <CardHeader>
+        <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
+          <CardTitle className="text-lg text-slate-900 dark:text-slate-50 text-right">
+            {t.previousList}
+          </CardTitle>
+          <div className="flex gap-2 [dir=rtl]:flex-row-reverse">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setListToDelete(viewingPreviousListId);
+                setShowDeletePreviousDialog(true);
+              }}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+            >
+              <Trash2 className="h-4 w-4 me-2" />
+              {t.deletePreviousList}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClosePreviousList}
+            >
+              <X className="h-4 w-4 me-2" />
+              {t.closePreviousList}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loadingPreviousItems ? (
+          <div className="flex items-center justify-center py-8 text-slate-600 dark:text-slate-400">
+            <Loader2 className="h-5 w-5 animate-spin me-2 text-emerald-600 dark:text-emerald-400" />
+            <span>{t.loadingItems}</span>
+          </div>
+        ) : previousListItems.length === 0 ? (
+          <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+            <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-50 text-slate-400 dark:text-slate-500" />
+            <p className="font-medium mb-1 text-slate-600 dark:text-slate-300">{t.noItems}</p>
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {previousListItems.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 [dir=rtl]:flex-row-reverse opacity-75"
+              >
+                <input
+                  type="checkbox"
+                  checked={true}
+                  disabled
+                  className="w-5 h-5 rounded border-slate-300 text-emerald-600 cursor-not-allowed opacity-50"
+                />
+                <div className="w-16 h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  {item.image_url ? (
+                    <img
+                      src={item.image_url}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <ShoppingCart className="h-6 w-6 text-slate-400" />
+                  )}
+                </div>
+                <div className="flex-1 text-right min-w-0">
+                  <div className="font-medium text-slate-700 dark:text-slate-200 line-through">
+                    {item.name}
+                  </div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    {item.category || 'ללא קטגוריה'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-sm font-medium text-slate-500 dark:text-slate-400 w-8 text-center">
+                    {item.quantity}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="min-h-screen flex bg-white dark:bg-slate-950">
       {/* Sidebar */}
@@ -770,7 +859,7 @@ export default function Home() {
 
         <main className={`relative z-0 container mx-auto px-6 py-8 max-w-5xl`}>
 
-          <div className={`grid gap-6 ${viewingPreviousListId ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={`grid gap-6 grid-cols-1 ${viewingPreviousListId ? 'md:grid-cols-2' : ''}`}>
             {/* Active List - Always shown */}
             {activeUserId && selectedListId && (
               <div className="space-y-6">
@@ -1533,102 +1622,31 @@ export default function Home() {
               </div>
             )}
 
-            {/* Previous List View - Shown alongside active list */}
+            {/* Previous List View - Desktop: inline second column */}
             {viewingPreviousListId && (
-              <div className="space-y-6">
-                <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                  <CardHeader>
-                    <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
-                      <CardTitle className="text-lg text-slate-900 dark:text-slate-50 text-right">
-                        {t.previousList}
-                      </CardTitle>
-                      <div className="flex gap-2 [dir=rtl]:flex-row-reverse">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setListToDelete(viewingPreviousListId);
-                            setShowDeletePreviousDialog(true);
-                          }}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                        >
-                          <Trash2 className="h-4 w-4 me-2" />
-                          {t.deletePreviousList}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleClosePreviousList}
-                        >
-                          <X className="h-4 w-4 me-2" />
-                          {t.closePreviousList}
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {loadingPreviousItems ? (
-                      <div className="flex items-center justify-center py-8 text-slate-600 dark:text-slate-400">
-                        <Loader2 className="h-5 w-5 animate-spin me-2 text-emerald-600 dark:text-emerald-400" />
-                        <span>{t.loadingItems}</span>
-                      </div>
-                    ) : previousListItems.length === 0 ? (
-                      <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-                        <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-50 text-slate-400 dark:text-slate-500" />
-                        <p className="font-medium mb-1 text-slate-600 dark:text-slate-300">{t.noItems}</p>
-                      </div>
-                    ) : (
-                      <ul className="space-y-3">
-                        {previousListItems.map((item) => (
-                          <li
-                            key={item.id}
-                            className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 [dir=rtl]:flex-row-reverse opacity-75"
-                          >
-                            {/* Checkbox - disabled for previous lists */}
-                            <input
-                              type="checkbox"
-                              checked={true}
-                              disabled
-                              className="w-5 h-5 rounded border-slate-300 text-emerald-600 cursor-not-allowed opacity-50"
-                            />
-                            
-                            {/* Image placeholder */}
-                            <div className="w-16 h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                              {item.image_url ? (
-                                <img
-                                  src={item.image_url}
-                                  alt={item.name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <ShoppingCart className="h-6 w-6 text-slate-400" />
-                              )}
-                            </div>
-                            
-                            {/* Item name */}
-                            <div className="flex-1 text-right min-w-0">
-                              <div className="font-medium text-slate-700 dark:text-slate-200 line-through">
-                                {item.name}
-                              </div>
-                              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                                {item.category || 'ללא קטגוריה'}
-                              </div>
-                            </div>
-                            
-                            {/* Quantity - read only */}
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              <span className="text-sm font-medium text-slate-500 dark:text-slate-400 w-8 text-center">
-                                {item.quantity}
-                              </span>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </CardContent>
-                </Card>
+              <div className="hidden md:block space-y-6">
+                {previousListCardContent}
               </div>
             )}
+          </div>
+
+          {/* Previous List View - Mobile: full-width drawer overlay */}
+          <div className="md:hidden">
+            <Drawer
+              open={!!viewingPreviousListId}
+              onOpenChange={(open) => {
+                if (!open) handleClosePreviousList();
+              }}
+            >
+              <DrawerContent
+                side="right"
+                className="w-[90vw] max-w-[420px] p-0 border-0 z-[100] overflow-y-auto"
+              >
+                <div className="p-4 pt-12">
+                  {previousListCardContent}
+                </div>
+              </DrawerContent>
+            </Drawer>
           </div>
 
           {activeUserId && !selectedListId && (
