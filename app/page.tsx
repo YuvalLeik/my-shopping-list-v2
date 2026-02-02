@@ -1644,7 +1644,7 @@ export default function Home() {
           )}
         </main>
 
-        {/* Floating Action Button - Mobile only */}
+        {/* Floating Action Button - Add item (Mobile only) */}
         {showFab && activeUserId && selectedListId && (
           <button
             onClick={() => {
@@ -1659,15 +1659,6 @@ export default function Home() {
             <Plus className="h-6 w-6" />
           </button>
         )}
-
-        {/* Floating sidebar toggle - Mobile only */}
-        <button
-          onClick={() => setSidebarOpen((prev) => !prev)}
-          className="fixed bottom-6 left-6 z-50 w-14 h-14 rounded-full bg-slate-600 hover:bg-slate-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center [dir=rtl]:left-auto [dir=rtl]:right-6 md:hidden"
-          aria-label="רשימות קודמות"
-        >
-          <Menu className="h-6 w-6" />
-        </button>
       </div>
 
       {/* Complete List Confirmation Dialog */}
@@ -1714,11 +1705,11 @@ export default function Home() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Shopping Assistant Floating Button - Always visible when user and list are selected */}
+      {/* Shopping Assistant Floating Button - Bottom left (LTR) / right (RTL); one menu stays in top bar only */}
       {activeUserId && selectedListId && (
         <Button
           onClick={() => setShowAssistant(!showAssistant)}
-          className={`fixed bottom-6 left-6 w-14 h-14 rounded-full shadow-2xl text-white border-0 z-40 [dir=rtl]:left-auto [dir=rtl]:right-6 transition-all duration-200 ${
+          className={`fixed bottom-6 left-6 w-14 h-14 rounded-full shadow-2xl text-white border-0 z-50 [dir=rtl]:left-auto [dir=rtl]:right-6 transition-all duration-200 ${
             showAssistant 
               ? 'bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 scale-110' 
               : 'bg-gradient-to-br from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 hover:scale-110'
