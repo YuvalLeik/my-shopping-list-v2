@@ -72,6 +72,7 @@ export default function Home() {
   const [loadingPreviousItems, setLoadingPreviousItems] = useState(false);
   const [showDeletePreviousDialog, setShowDeletePreviousDialog] = useState(false);
   const [listToDelete, setListToDelete] = useState<string | null>(null);
+  const [deletingPreviousList, setDeletingPreviousList] = useState(false);
   const [editingListTitle, setEditingListTitle] = useState(false);
   const [listTitle, setListTitle] = useState('');
   const [updatingListTitle, setUpdatingListTitle] = useState(false);
@@ -558,8 +559,14 @@ export default function Home() {
   };
 
   const handleDeletePreviousList = async () => {
-    if (!listToDelete || !activeUserId) return;
-    
+    if (!listToDelete || !activeUserId) {
+      toast.error(t.failedToDeleteList, {
+        description: 'Cannot delete: missing list or user',
+      });
+      return;
+    }
+
+    setDeletingPreviousList(true);
     try {
       await deleteGroceryList(listToDelete, activeUserId);
       if (viewingPreviousListId === listToDelete) {
@@ -574,6 +581,8 @@ export default function Home() {
       toast.error(t.failedToDeleteList, {
         description: err instanceof Error ? err.message : 'Unknown error',
       });
+    } finally {
+      setDeletingPreviousList(false);
     }
   };
 
@@ -1845,13 +1854,21 @@ export default function Home() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="[dir=rtl]:flex-row-reverse">
-            <AlertDialogCancel onClick={() => setListToDelete(null)}>{t.cancel}</AlertDialogCancel>
-            <AlertDialogAction
+            <AlertDialogCancel onClick={() => setListToDelete(null)} disabled={deletingPreviousList}>{t.cancel}</AlertDialogCancel>
+            <Button
               onClick={handleDeletePreviousList}
+              disabled={deletingPreviousList}
               className="bg-red-600 hover:bg-red-700"
             >
-              {t.delete}
-            </AlertDialogAction>
+              {deletingPreviousList ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin me-2" />
+                  {t.delete}
+                </>
+              ) : (
+                t.delete
+              )}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
