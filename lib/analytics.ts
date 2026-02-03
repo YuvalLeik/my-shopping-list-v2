@@ -18,6 +18,13 @@ export interface MonthlyTrend {
   total_items: number;
 }
 
+/** Per-day completion timeline: date = YYYY-MM-DD from list completed_at. All dashboard data is per-user and from completed lists only. */
+export interface CompletionDatePoint {
+  date: string;
+  listCount: number;
+  totalItems: number;
+}
+
 export interface DashboardStats {
   totalPurchasedItems: number;
   totalCompletedLists: number;
@@ -25,6 +32,7 @@ export interface DashboardStats {
   topItems: TopItem[];
   categoryDistribution: CategoryDistribution[];
   monthlyTrend: MonthlyTrend[];
+  completionTimelineByDay: CompletionDatePoint[];
 }
 
 /**
@@ -361,16 +369,64 @@ export async function getItemMonthlyTrend(userId: string, itemName: string): Pro
 }
 
 /**
- * Get all dashboard stats at once
+ * Get completion timeline by day: for each date (YYYY-MM-DD) with at least one completed list,
+ * returns listCount and totalItems (purchased). Per-user, completed lists only.
+ */
+export async function getCompletionTimelineByDay(userId: string): Promise<CompletionDatePoint[]> {
+  try {
+    const { data: completedLists, error: listsError } = await supabase
+      .from('grocery_lists')
+      .select('id, completed_at')
+      .eq('local_user_id', userId)
+      .not('completed_at', 'is', null)
+      .order('completed_at', { ascending: true });
+
+    if (listsError || !completedLists || completedLists.length === 0) {
+      return [];
+    }
+
+    const dateMap = new Map<string, { listCount: number; totalItems: number }>();
+
+    for (const list of completedLists) {
+      if (!list.completed_at) continue;
+      const d = new Date(list.completed_at);
+      const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      const { data: items } = await supabase
+        .from('grocery_items')
+        .select('quantity')
+        .eq('list_id', list.id)
+        .eq('purchased', true);
+
+      const itemCount = items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+      const current = dateMap.get(date) || { listCount: 0, totalItems: 0 };
+      dateMap.set(date, {
+        listCount: current.listCount + 1,
+        totalItems: current.totalItems + itemCount,
+      });
+    }
+
+    return Array.from(dateMap.entries())
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  } catch (error) {
+    console.error('Error getting completion timeline by day:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all dashboard stats at once. All data is per-user and from completed lists (and purchased items) only.
  */
 export async function getDashboardStats(userId: string): Promise<DashboardStats> {
   try {
-    const [totalPurchasedItems, totalCompletedLists, topItems, categoryDistribution, monthlyTrend] = await Promise.all([
+    const [totalPurchasedItems, totalCompletedLists, topItems, categoryDistribution, monthlyTrend, completionTimelineByDay] = await Promise.all([
       getTotalPurchasedItems(userId),
       getTotalCompletedLists(userId),
       getTopPurchasedItems(userId, 10),
       getCategoryDistribution(userId),
       getMonthlyTrend(userId),
+      getCompletionTimelineByDay(userId),
     ]);
 
     const avgItemsPerList = totalCompletedLists > 0 
@@ -384,6 +440,7 @@ export async function getDashboardStats(userId: string): Promise<DashboardStats>
       topItems,
       categoryDistribution,
       monthlyTrend,
+      completionTimelineByDay,
     };
   } catch (error) {
     console.error('Error getting dashboard stats:', error);
@@ -394,6 +451,7 @@ export async function getDashboardStats(userId: string): Promise<DashboardStats>
       topItems: [],
       categoryDistribution: [],
       monthlyTrend: [],
+      completionTimelineByDay: [],
     };
   }
 }
