@@ -68,4 +68,10 @@ export const t = {
   deleteSelected: (n: number) => `מחק נבחרים (${n})`,
   confirmDeleteSelected: (n: number) => `למחוק ${n} פריטים?`,
   itemsDeleted: (n: number) => `${n} פריטים נמחקו`,
+  totalCostOptional: 'סה״כ עלות (אופציונלי) ₪',
+  totalCost: 'עלות כוללת',
+  addCost: 'הוסף עלות',
+  editCost: 'ערוך עלות',
+  save: 'שמור',
+  priorListCostUpdate: 'הרשימה הנצפית – עדכן עלות כוללת',
 };

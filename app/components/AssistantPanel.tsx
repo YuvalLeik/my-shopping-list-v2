@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { createGroceryItem, GroceryItem } from '@/lib/groceryItems';
+import { updateListTotalCost } from '@/lib/groceryLists';
 import { getCategories, getSuggestionsByPrefix, getItemsByCategory, ShoppingItemCatalog, filterExistingItems, normalizeItemName } from '@/lib/shoppingItems';
+import { t } from '@/lib/translations';
 import { toast } from 'sonner';
 
 interface AssistantPanelProps {
@@ -16,11 +18,14 @@ interface AssistantPanelProps {
   currentListItems?: GroceryItem[]; // Current items in the active list
   onClose: () => void;
   onItemsAdded?: () => void;
+  priorListId?: string | null;
+  priorListTotalCost?: number | null;
+  onPriorListCostUpdated?: () => void;
 }
 
 type AssistantState = 'IDLE' | 'CHOOSING_CATEGORY' | 'SHOWING_ITEMS_FOR_CATEGORY';
 
-export function AssistantPanel({ userId, selectedListId, currentListItems = [], onClose, onItemsAdded }: AssistantPanelProps) {
+export function AssistantPanel({ userId, selectedListId, currentListItems = [], onClose, onItemsAdded, priorListId = null, priorListTotalCost = null, onPriorListCostUpdated }: AssistantPanelProps) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Array<{ text: string; isUser: boolean }>>([]);
   const [state, setState] = useState<AssistantState>('IDLE');
@@ -30,6 +35,8 @@ export function AssistantPanel({ userId, selectedListId, currentListItems = [], 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [categoryItems, setCategoryItems] = useState<ShoppingItemCatalog[]>([]);
   const [prefixSuggestions, setPrefixSuggestions] = useState<ShoppingItemCatalog[]>([]);
+  const [priorCostInput, setPriorCostInput] = useState('');
+  const [updatingPriorCost, setUpdatingPriorCost] = useState(false);
 
   // Initialize with greeting
   useEffect(() => {
@@ -43,6 +50,15 @@ export function AssistantPanel({ userId, selectedListId, currentListItems = [], 
       setPrefixSuggestions([]);
     }
   }, [userId, selectedListId]);
+
+  // Sync prior list cost input when prop changes
+  useEffect(() => {
+    if (priorListTotalCost != null) {
+      setPriorCostInput(String(priorListTotalCost));
+    } else {
+      setPriorCostInput('');
+    }
+  }, [priorListTotalCost]);
 
   // Load categories when entering CHOOSING_CATEGORY state
   useEffect(() => {
@@ -300,6 +316,22 @@ export function AssistantPanel({ userId, selectedListId, currentListItems = [], 
     ]);
   };
 
+  const handleSavePriorCost = async () => {
+    if (!priorListId || !userId) return;
+    const parsed = priorCostInput.trim() ? parseFloat(priorCostInput.replace(/,/g, '.')) : null;
+    const value = parsed !== null && !Number.isNaN(parsed) ? parsed : null;
+    setUpdatingPriorCost(true);
+    try {
+      await updateListTotalCost(priorListId, userId, value);
+      onPriorListCostUpdated?.();
+      toast.success(t.save);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setUpdatingPriorCost(false);
+    }
+  };
+
   return (
     <Card className="fixed bottom-24 left-6 w-96 shadow-2xl border-slate-200 bg-white dark:bg-slate-900 z-50 [dir=rtl]:left-auto [dir=rtl]:right-6">
       <CardHeader className="pb-3">
@@ -316,6 +348,42 @@ export function AssistantPanel({ userId, selectedListId, currentListItems = [], 
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Prior list: update total cost */}
+        {priorListId && (
+          <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+            <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2 text-right">
+              {t.priorListCostUpdate}
+            </p>
+            <div className="flex gap-2 items-center [dir=rtl]:flex-row-reverse">
+              <Input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={0.01}
+                placeholder={t.totalCost}
+                value={priorCostInput}
+                onChange={(e) => setPriorCostInput(e.target.value)}
+                className="w-24 text-right"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSavePriorCost}
+                disabled={updatingPriorCost}
+              >
+                {updatingPriorCost ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin me-1" />
+                    {t.save}
+                  </>
+                ) : (
+                  t.save
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Messages area */}
         <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 min-h-[150px] max-h-[200px] overflow-y-auto">
           {loading ? (

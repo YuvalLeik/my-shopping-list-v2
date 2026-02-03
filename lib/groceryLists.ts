@@ -6,6 +6,7 @@ export interface GroceryList {
   title: string;
   created_at: string;
   completed_at?: string | null;
+  total_cost?: number | null;
 }
 
 export interface GroceryListWithCount extends GroceryList {
@@ -197,7 +198,7 @@ export async function updateGroceryListTitle(listId: string, title: string, user
   return data;
 }
 
-export async function markListAsCompleted(listId: string, userId: string): Promise<GroceryList> {
+export async function markListAsCompleted(listId: string, userId: string, optionalTotalCost?: number | null): Promise<GroceryList> {
   // First verify the list belongs to the user
   const { data: listCheck, error: listError } = await supabase
     .from('grocery_lists')
@@ -210,17 +211,22 @@ export async function markListAsCompleted(listId: string, userId: string): Promi
     throw new Error(`Failed to mark list as completed: List not found or access denied`);
   }
 
-  // Try to update completed_at
+  const updatePayload: { completed_at: string; total_cost?: number | null } = {
+    completed_at: new Date().toISOString(),
+  };
+  if (optionalTotalCost !== undefined && optionalTotalCost !== null) {
+    updatePayload.total_cost = optionalTotalCost;
+  }
+
   const { data, error } = await supabase
     .from('grocery_lists')
-    .update({ completed_at: new Date().toISOString() })
+    .update(updatePayload)
     .eq('id', listId)
-    .eq('local_user_id', userId) // Double-check in update
+    .eq('local_user_id', userId)
     .select()
     .single();
 
   if (error) {
-    // If column doesn't exist, throw a clear error message
     if (error.message.includes('completed_at') || error.message.includes('column') || error.message.includes('schema cache')) {
       throw new Error(`השדה completed_at לא קיים במסד הנתונים. אנא הרץ את ה-migration: supabase/migrations/20260116000000_add_completed_at.sql`);
     }
@@ -229,6 +235,51 @@ export async function markListAsCompleted(listId: string, userId: string): Promi
 
   if (!data) {
     throw new Error('Failed to mark list as completed: No data returned');
+  }
+
+  return data;
+}
+
+export async function getGroceryListById(listId: string, userId: string): Promise<GroceryList | null> {
+  const { data, error } = await supabase
+    .from('grocery_lists')
+    .select('*')
+    .eq('id', listId)
+    .eq('local_user_id', userId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+  return data;
+}
+
+export async function updateListTotalCost(listId: string, userId: string, totalCost: number | null): Promise<GroceryList> {
+  const { data: listCheck, error: listError } = await supabase
+    .from('grocery_lists')
+    .select('id')
+    .eq('id', listId)
+    .eq('local_user_id', userId)
+    .single();
+
+  if (listError || !listCheck) {
+    throw new Error(`Failed to update list cost: List not found or access denied`);
+  }
+
+  const { data, error } = await supabase
+    .from('grocery_lists')
+    .update({ total_cost: totalCost })
+    .eq('id', listId)
+    .eq('local_user_id', userId)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to update list cost: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error('Failed to update list cost: No data returned');
   }
 
   return data;

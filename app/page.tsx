@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
-import { fetchGroceryLists, createGroceryList, deleteGroceryList, markListAsCompleted, updateGroceryListTitle, GroceryList } from '@/lib/groceryLists';
+import { fetchGroceryLists, createGroceryList, deleteGroceryList, markListAsCompleted, updateGroceryListTitle, getGroceryListById, updateListTotalCost, GroceryList } from '@/lib/groceryLists';
 import { fetchGroceryItems, createGroceryItem, deleteGroceryItem, updateGroceryItem, getAllItemNames, getItemCategoryByName, GroceryItem } from '@/lib/groceryItems';
 import { uploadItemImage } from '@/lib/storage';
 import { getShoppingItemByName, upsertShoppingItemImageByName, normalizeItemName } from '@/lib/shoppingItems';
@@ -64,12 +64,16 @@ export default function Home() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
+  const [completeListTotalCost, setCompleteListTotalCost] = useState('');
   const [completingListId, setCompletingListId] = useState<string | null>(null);
   const [purchasedItemsExpanded, setPurchasedItemsExpanded] = useState(false);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   const [viewingPreviousListId, setViewingPreviousListId] = useState<string | null>(null);
+  const [previousListMeta, setPreviousListMeta] = useState<GroceryList | null>(null);
   const [previousListItems, setPreviousListItems] = useState<GroceryItem[]>([]);
   const [loadingPreviousItems, setLoadingPreviousItems] = useState(false);
+  const [priorCostInput, setPriorCostInput] = useState('');
+  const [updatingPriorCost, setUpdatingPriorCost] = useState(false);
   const [showDeletePreviousDialog, setShowDeletePreviousDialog] = useState(false);
   const [listToDelete, setListToDelete] = useState<string | null>(null);
   const [deletingPreviousList, setDeletingPreviousList] = useState(false);
@@ -537,7 +541,14 @@ export default function Home() {
   const handleListSelect = (listId: string) => {
     // This is for previous lists - show them alongside, not replace
     setViewingPreviousListId(listId);
-    // Load items for the previous list
+    setPreviousListMeta(null);
+    setPriorCostInput('');
+    // Load list meta (title, total_cost) and items for the previous list
+    if (activeUserId) {
+      getGroceryListById(listId, activeUserId)
+        .then(meta => setPreviousListMeta(meta))
+        .catch(() => setPreviousListMeta(null));
+    }
     setLoadingPreviousItems(true);
     fetchGroceryItems(listId)
       .then(items => {
@@ -553,9 +564,36 @@ export default function Home() {
       });
   };
 
+  // Sync prior list cost input when meta loads
+  useEffect(() => {
+    if (previousListMeta?.total_cost != null) {
+      setPriorCostInput(String(previousListMeta.total_cost));
+    } else {
+      setPriorCostInput('');
+    }
+  }, [previousListMeta?.total_cost]);
+
+  const handleSavePriorCost = async () => {
+    if (!viewingPreviousListId || !activeUserId) return;
+    const parsed = priorCostInput.trim() ? parseFloat(priorCostInput.replace(/,/g, '.')) : null;
+    const value = parsed !== null && !Number.isNaN(parsed) ? parsed : null;
+    setUpdatingPriorCost(true);
+    try {
+      const updated = await updateListTotalCost(viewingPreviousListId, activeUserId, value);
+      setPreviousListMeta(updated);
+      toast.success(t.save);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setUpdatingPriorCost(false);
+    }
+  };
+
   const handleClosePreviousList = () => {
     setViewingPreviousListId(null);
+    setPreviousListMeta(null);
     setPreviousListItems([]);
+    setPriorCostInput('');
   };
 
   const handleDeletePreviousList = async () => {
@@ -571,6 +609,7 @@ export default function Home() {
       await deleteGroceryList(listToDelete, activeUserId);
       if (viewingPreviousListId === listToDelete) {
         setViewingPreviousListId(null);
+        setPreviousListMeta(null);
         setPreviousListItems([]);
       }
       setListToDelete(null);
@@ -589,12 +628,16 @@ export default function Home() {
   const handleMarkListCompleted = async () => {
     if (!selectedListId || !activeUserId) return;
 
+    const costValue = completeListTotalCost.trim() ? parseFloat(completeListTotalCost.replace(/,/g, '.')) : undefined;
+    const optionalCost = costValue !== undefined && !Number.isNaN(costValue) ? costValue : undefined;
+
     setCompletingListId(selectedListId);
     setShowCompleteDialog(false);
+    setCompleteListTotalCost('');
     
     try {
-      // Mark current list as completed
-      await markListAsCompleted(selectedListId, activeUserId);
+      // Mark current list as completed (with optional total cost)
+      await markListAsCompleted(selectedListId, activeUserId, optionalCost);
       
       // Create a new empty list with default title
       const defaultTitle = 'רשימה חדשה';
@@ -715,6 +758,41 @@ export default function Home() {
         </div>
       </CardHeader>
       <CardContent>
+        {/* Total cost row for prior list */}
+        <div className="flex flex-wrap items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-slate-700 [dir=rtl]:flex-row-reverse">
+          {previousListMeta?.total_cost != null && (
+            <span className="text-sm text-slate-600 dark:text-slate-400">
+              {t.totalCost}: {Number(previousListMeta.total_cost).toFixed(1)} ₪
+            </span>
+          )}
+          <div className="flex items-center gap-2 [dir=rtl]:flex-row-reverse flex-1 min-w-0">
+            <Input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step={0.01}
+              placeholder={t.totalCost}
+              value={priorCostInput}
+              onChange={(e) => setPriorCostInput(e.target.value)}
+              className="w-24 text-right"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSavePriorCost}
+              disabled={updatingPriorCost}
+            >
+              {updatingPriorCost ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin me-1" />
+                  {t.save}
+                </>
+              ) : (
+                previousListMeta?.total_cost != null ? t.editCost : t.addCost
+              )}
+            </Button>
+          </div>
+        </div>
         {loadingPreviousItems ? (
           <div className="flex items-center justify-center py-8 text-slate-600 dark:text-slate-400">
             <Loader2 className="h-5 w-5 animate-spin me-2 text-emerald-600 dark:text-emerald-400" />
@@ -1135,7 +1213,7 @@ export default function Home() {
                         )}
                       </div>
                       <Button
-                        onClick={() => setShowCompleteDialog(true)}
+                        onClick={() => { setCompleteListTotalCost(''); setShowCompleteDialog(true); }}
                         className="bg-green-600 hover:bg-green-700 text-white [dir=rtl]:flex-row-reverse"
                         disabled={completingListId !== null}
                       >
@@ -1822,7 +1900,7 @@ export default function Home() {
       </div>
 
       {/* Complete List Confirmation Dialog */}
-      <AlertDialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
+      <AlertDialog open={showCompleteDialog} onOpenChange={(open) => { if (!open) setCompleteListTotalCost(''); setShowCompleteDialog(open); }}>
         <AlertDialogContent className="[dir=rtl]:text-right">
           <AlertDialogHeader>
             <AlertDialogTitle>{t.markListCompleted}</AlertDialogTitle>
@@ -1830,6 +1908,22 @@ export default function Home() {
               {t.confirmMarkCompleted}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="py-2">
+            <label htmlFor="complete-total-cost" className="text-sm text-slate-600 dark:text-slate-400 block mb-1 text-right">
+              {t.totalCostOptional}
+            </label>
+            <Input
+              id="complete-total-cost"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step={0.01}
+              placeholder="0"
+              value={completeListTotalCost}
+              onChange={(e) => setCompleteListTotalCost(e.target.value)}
+              className="text-right"
+            />
+          </div>
           <AlertDialogFooter className="[dir=rtl]:flex-row-reverse">
             <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
             <AlertDialogAction
@@ -1933,6 +2027,18 @@ export default function Home() {
                 setItems(loadedItems);
               } catch {
                 // Failed to reload items - error already handled
+              }
+            }
+          }}
+          priorListId={viewingPreviousListId}
+          priorListTotalCost={previousListMeta?.total_cost ?? null}
+          onPriorListCostUpdated={async () => {
+            if (viewingPreviousListId && activeUserId) {
+              try {
+                const meta = await getGroceryListById(viewingPreviousListId, activeUserId);
+                setPreviousListMeta(meta);
+              } catch {
+                // Failed to refetch - keep current state
               }
             }
           }}
