@@ -301,171 +301,13 @@ export function Dashboard({ userId }: DashboardProps) {
         </Card>
       </div>
 
-      {/* Timeline / Completion over time - data by completion date */}
-      {(stats.completionTimelineByDay.length > 0 || stats.monthlyTrend.length > 0) && (
-        <div className="space-y-6">
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">ציר זמן השלמות</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Lists completed over time */}
-            {stats.completionTimelineByDay.length > 0 && (
-              <Card className="shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    רשימות שהושלמו לאורך זמן
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="h-[280px] sm:h-[320px] mt-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={stats.completionTimelineByDay}
-                        margin={{ top: 10, right: 20, left: 10, bottom: 60 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                        <XAxis
-                          dataKey="date"
-                          tickFormatter={(value) => {
-                            const parts = value.split('-');
-                            return parts.length === 3 ? `${parts[2]}/${parts[1]}` : value;
-                          }}
-                          tick={{ fill: '#64748b', fontSize: 11 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={60}
-                        />
-                        <YAxis
-                          type="number"
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
-                          allowDecimals={false}
-                        />
-                        <Tooltip
-                          content={<CustomTooltip />}
-                          labelFormatter={(value) => {
-                            const parts = String(value).split('-');
-                            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : value;
-                          }}
-                        />
-                        <Bar
-                          dataKey="listCount"
-                          fill={CHART_COLORS.info}
-                          name="מספר רשימות"
-                          radius={[4, 4, 0, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+      {/* Main data: items (what was purchased). Date is context. */}
+      <div className="space-y-6">
+        <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">נתוני הפריטים</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400">כל הנתונים מבוססים על הפריטים שנרכשו ברשימות שהושלמו. התאריך משמש להצגת מגמות לאורך זמן.</p>
+      </div>
 
-            {/* Items by completion date */}
-            {stats.completionTimelineByDay.length > 0 && (
-              <Card className="shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    פריטים לפי תאריך השלמה
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="h-[280px] sm:h-[320px] mt-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={stats.completionTimelineByDay}
-                        margin={{ top: 10, right: 20, left: 10, bottom: 60 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis
-                          dataKey="date"
-                          tickFormatter={(value) => {
-                            const parts = value.split('-');
-                            return parts.length === 3 ? `${parts[2]}/${parts[1]}` : value;
-                          }}
-                          tick={{ fill: '#64748b', fontSize: 11 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={60}
-                        />
-                        <YAxis
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
-                          allowDecimals={false}
-                        />
-                        <Tooltip
-                          content={<CustomTooltip />}
-                          labelFormatter={(value) => {
-                            const parts = String(value).split('-');
-                            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : value;
-                          }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="totalItems"
-                          stroke={CHART_COLORS.secondary}
-                          strokeWidth={2}
-                          name="פריטים"
-                          dot={{ fill: CHART_COLORS.secondary, strokeWidth: 2, r: 4 }}
-                          activeDot={{ r: 6 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Items per month (existing monthly trend) */}
-            {stats.monthlyTrend.length > 0 && (
-              <Card className="shadow-sm hover:shadow-md transition-shadow lg:col-span-2">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    פריטים שנרכשו לפי חודש
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="h-[280px] sm:h-[320px] mt-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={stats.monthlyTrend}
-                        margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                        <XAxis
-                          dataKey="month"
-                          tick={{ fill: '#64748b', fontSize: 11 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
-                        />
-                        <YAxis
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
-                          allowDecimals={false}
-                        />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Bar
-                          dataKey="total_items"
-                          fill={CHART_COLORS.primary}
-                          name="פריטים"
-                          radius={[4, 4, 0, 0]}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Charts Grid */}
+      {/* Charts Grid - item-centric first */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top 10 Items Chart */}
         {stats.topItems.length > 0 && (
@@ -706,6 +548,171 @@ export function Dashboard({ userId }: DashboardProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Items over time - date as context for item data */}
+      {(stats.completionTimelineByDay.length > 0 || stats.monthlyTrend.length > 0) && (
+        <div className="space-y-6">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">פריטים לאורך זמן</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">כמות הפריטים שנרכשו, לפי תאריך. התאריך עוזר לראות מתי רכשת.</p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Items by completion date - main item timeline */}
+            {stats.completionTimelineByDay.length > 0 && (
+              <Card className="shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    כמות פריטים לפי תאריך השלמה
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="h-[280px] sm:h-[320px] mt-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={stats.completionTimelineByDay}
+                        margin={{ top: 10, right: 20, left: 10, bottom: 60 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="date"
+                          tickFormatter={(value) => {
+                            const parts = value.split('-');
+                            return parts.length === 3 ? `${parts[2]}/${parts[1]}` : value;
+                          }}
+                          tick={{ fill: '#64748b', fontSize: 11 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          tickLine={{ stroke: '#cbd5e1' }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={60}
+                        />
+                        <YAxis
+                          tick={{ fill: '#64748b', fontSize: 12 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          tickLine={{ stroke: '#cbd5e1' }}
+                          allowDecimals={false}
+                        />
+                        <Tooltip
+                          content={<CustomTooltip />}
+                          labelFormatter={(value) => {
+                            const parts = String(value).split('-');
+                            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : value;
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="totalItems"
+                          stroke={CHART_COLORS.secondary}
+                          strokeWidth={2}
+                          name="פריטים"
+                          dot={{ fill: CHART_COLORS.secondary, strokeWidth: 2, r: 4 }}
+                          activeDot={{ r: 6 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Items per month */}
+            {stats.monthlyTrend.length > 0 && (
+              <Card className="shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    כמות פריטים לפי חודש
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="h-[280px] sm:h-[320px] mt-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={stats.monthlyTrend}
+                        margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                        <XAxis
+                          dataKey="month"
+                          tick={{ fill: '#64748b', fontSize: 11 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          tickLine={{ stroke: '#cbd5e1' }}
+                        />
+                        <YAxis
+                          tick={{ fill: '#64748b', fontSize: 12 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          tickLine={{ stroke: '#cbd5e1' }}
+                          allowDecimals={false}
+                        />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar
+                          dataKey="total_items"
+                          fill={CHART_COLORS.primary}
+                          name="פריטים"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Lists per date - context only */}
+            {stats.completionTimelineByDay.length > 0 && (
+              <Card className="shadow-sm hover:shadow-md transition-shadow lg:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    רשימות שהושלמו לפי תאריך (הקשר)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="h-[260px] sm:h-[280px] mt-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={stats.completionTimelineByDay}
+                        margin={{ top: 10, right: 20, left: 10, bottom: 60 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                        <XAxis
+                          dataKey="date"
+                          tickFormatter={(value) => {
+                            const parts = value.split('-');
+                            return parts.length === 3 ? `${parts[2]}/${parts[1]}` : value;
+                          }}
+                          tick={{ fill: '#64748b', fontSize: 11 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          tickLine={{ stroke: '#cbd5e1' }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={60}
+                        />
+                        <YAxis
+                          type="number"
+                          tick={{ fill: '#64748b', fontSize: 12 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          tickLine={{ stroke: '#cbd5e1' }}
+                          allowDecimals={false}
+                        />
+                        <Tooltip
+                          content={<CustomTooltip />}
+                          labelFormatter={(value) => {
+                            const parts = String(value).split('-');
+                            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : value;
+                          }}
+                        />
+                        <Bar
+                          dataKey="listCount"
+                          fill={CHART_COLORS.info}
+                          name="מספר רשימות"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Empty State - all data is per-user and from completed lists only */}
       {stats.topItems.length === 0 && stats.categoryDistribution.length === 0 && stats.monthlyTrend.length === 0 && stats.completionTimelineByDay.length === 0 && (
