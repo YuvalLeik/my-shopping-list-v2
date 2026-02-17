@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
-import { fetchGroceryLists, createGroceryList, deleteGroceryList, markListAsCompleted, updateGroceryListTitle, getGroceryListById, updateListTotalCost, GroceryList } from '@/lib/groceryLists';
+import { fetchGroceryLists, fetchGroceryListsWithItemCount, createGroceryList, deleteGroceryList, markListAsCompleted, updateGroceryListTitle, getGroceryListById, updateListTotalCost, GroceryList } from '@/lib/groceryLists';
+import { fetchPurchaseRecordsByListId, PurchaseRecordWithItems } from '@/lib/purchaseRecords';
 import { fetchGroceryItems, createGroceryItem, deleteGroceryItem, updateGroceryItem, getAllItemNames, getItemCategoryByName, GroceryItem } from '@/lib/groceryItems';
 import { uploadItemImage } from '@/lib/storage';
 import { getShoppingItemByName, upsertShoppingItemImageByName, normalizeItemName } from '@/lib/shoppingItems';
@@ -26,10 +27,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ShoppingCart, Plus, Trash2, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, User, Menu } from 'lucide-react';
+import { Loader2, ShoppingCart, Plus, Trash2, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, User, Menu, Receipt } from 'lucide-react';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { Sidebar } from '@/components/Sidebar';
 import { AssistantPanel } from '@/app/components/AssistantPanel';
+import { ImportReceiptPanel } from '@/app/components/ImportReceiptPanel';
 import { t } from '@/lib/translations';
 import { fetchLocalUsers, LocalUser } from '@/lib/localUsers';
 
@@ -96,6 +98,9 @@ export default function Home() {
   const [selectionModeActive, setSelectionModeActive] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [showImportReceipt, setShowImportReceipt] = useState(false);
+  const [previousListPurchases, setPreviousListPurchases] = useState<PurchaseRecordWithItems[]>([]);
+  const [completedListsForDropdown, setCompletedListsForDropdown] = useState<GroceryList[]>([]);
 
   // Load all item names for autocomplete from global catalog (shopping_items)
   // This is shared across all users for learning/suggestions
@@ -543,11 +548,16 @@ export default function Home() {
     setViewingPreviousListId(listId);
     setPreviousListMeta(null);
     setPriorCostInput('');
+    setPreviousListPurchases([]);
     // Load list meta (title, total_cost) and items for the previous list
     if (activeUserId) {
       getGroceryListById(listId, activeUserId)
         .then(meta => setPreviousListMeta(meta))
         .catch(() => setPreviousListMeta(null));
+      // Load linked purchase records
+      fetchPurchaseRecordsByListId(listId, activeUserId)
+        .then(records => setPreviousListPurchases(records))
+        .catch(() => setPreviousListPurchases([]));
     }
     setLoadingPreviousItems(true);
     fetchGroceryItems(listId)
@@ -594,6 +604,7 @@ export default function Home() {
     setPreviousListMeta(null);
     setPreviousListItems([]);
     setPriorCostInput('');
+    setPreviousListPurchases([]);
   };
 
   const handleDeletePreviousList = async () => {
@@ -611,6 +622,7 @@ export default function Home() {
         setViewingPreviousListId(null);
         setPreviousListMeta(null);
         setPreviousListItems([]);
+        setPreviousListPurchases([]);
       }
       setListToDelete(null);
       setShowDeletePreviousDialog(false);
@@ -793,6 +805,55 @@ export default function Home() {
             </Button>
           </div>
         </div>
+
+        {/* Import receipt button + purchase records */}
+        <div className="mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+          <div className="flex items-center justify-between mb-2 [dir=rtl]:flex-row-reverse">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{t.purchaseRecords}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // Load completed lists for the dropdown
+                if (activeUserId) {
+                  fetchGroceryListsWithItemCount(activeUserId, true)
+                    .then(all => setCompletedListsForDropdown(all.filter(l => l.completed_at)))
+                    .catch(() => setCompletedListsForDropdown([]));
+                }
+                setShowImportReceipt(true);
+              }}
+              className="text-emerald-600 hover:text-emerald-700"
+            >
+              <Receipt className="h-4 w-4 me-1" />
+              {t.importReceipt}
+            </Button>
+          </div>
+          {previousListPurchases.length > 0 ? (
+            <div className="space-y-2">
+              {previousListPurchases.map(record => (
+                <div key={record.id} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-right">
+                  <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      {record.store_name ? t.purchaseRecordFrom(record.store_name) : t.importPurchase}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {record.purchase_date ? new Date(record.purchase_date).toLocaleDateString('he-IL') : ''}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400 [dir=rtl]:flex-row-reverse">
+                    <span>{t.purchaseRecordItems(record.items.length)}</span>
+                    {record.total_amount != null && (
+                      <span className="font-medium">{Number(record.total_amount).toFixed(1)} ₪</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 dark:text-slate-500 text-right">{t.noPurchaseRecords}</p>
+          )}
+        </div>
+
         {loadingPreviousItems ? (
           <div className="flex items-center justify-center py-8 text-slate-600 dark:text-slate-400">
             <Loader2 className="h-5 w-5 animate-spin me-2 text-emerald-600 dark:text-emerald-400" />
@@ -2010,6 +2071,27 @@ export default function Home() {
         >
           <Bot className="h-6 w-6" />
         </Button>
+      )}
+
+      {/* Import Receipt Panel */}
+      {showImportReceipt && activeUserId && (
+        <ImportReceiptPanel
+          userId={activeUserId}
+          preselectedListId={viewingPreviousListId}
+          completedLists={completedListsForDropdown}
+          onClose={() => setShowImportReceipt(false)}
+          onRecordSaved={async () => {
+            // Refresh purchase records for the viewed list
+            if (viewingPreviousListId && activeUserId) {
+              try {
+                const records = await fetchPurchaseRecordsByListId(viewingPreviousListId, activeUserId);
+                setPreviousListPurchases(records);
+              } catch {
+                // Failed to reload
+              }
+            }
+          }}
+        />
       )}
 
       {/* Shopping Assistant */}
