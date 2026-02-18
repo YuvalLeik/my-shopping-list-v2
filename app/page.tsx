@@ -1274,6 +1274,22 @@ export default function Home() {
                         )}
                       </div>
                       <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (activeUserId) {
+                            fetchGroceryListsWithItemCount(activeUserId, true)
+                              .then(all => setCompletedListsForDropdown(all.filter(l => l.completed_at)))
+                              .catch(() => setCompletedListsForDropdown([]));
+                          }
+                          setShowImportReceipt(true);
+                        }}
+                        className="text-emerald-600 hover:text-emerald-700"
+                      >
+                        <Receipt className="h-4 w-4 me-1" />
+                        {t.importReceipt}
+                      </Button>
+                      <Button
                         onClick={() => { setCompleteListTotalCost(''); setShowCompleteDialog(true); }}
                         className="bg-green-600 hover:bg-green-700 text-white [dir=rtl]:flex-row-reverse"
                         disabled={completingListId !== null}
