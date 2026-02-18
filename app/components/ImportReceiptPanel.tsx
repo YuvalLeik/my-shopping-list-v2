@@ -140,26 +140,30 @@ export function ImportReceiptPanel({
       formData.append('file', file);
       formData.append('userId', userId);
 
-      const res = await fetch('/api/receipt-ocr', {
+      const res = await fetch('/api/receipt-parse', {
         method: 'POST',
         body: formData,
       });
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'OCR failed');
+      if (!json.success) throw new Error(json.error || 'Parse failed');
 
-      const ocrText: string = json.data.text;
-      if (json.data.imageUrl) {
-        setReceiptImageUrl(json.data.imageUrl);
+      const data = json.data as ParsedReceipt & { rawText?: string };
+      setRawText(data.rawText || '');
+      setParsedStoreName(data.storeName || '');
+      setParsedDate(data.purchaseDate || '');
+      setParsedItems(data.items);
+      setParsedTotal(data.totalAmount != null ? String(data.totalAmount) : '');
+      setStep('parsed');
+
+      if (data.items.length === 0) {
+        toast.info(t.receiptNoItemsFound);
       }
-
-      // Now parse the OCR text
-      await handleParse(ocrText, 'photo_ocr');
     } catch (err) {
       toast.error(t.receiptOcrFailed, {
         description: err instanceof Error ? err.message : 'Unknown error',
       });
-      setLoading(false);
     } finally {
+      setLoading(false);
       if (photoInputRef.current) photoInputRef.current.value = '';
     }
   };
