@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseReceipt } from '@/lib/receiptParser';
+import { parseReceiptWithAI } from '@/lib/geminiReceiptParser';
 import { extractTextFromPdf } from '@/lib/pdfParser';
 
 export async function POST(request: NextRequest) {
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const parsed = parseReceipt(rawText);
+    const parsed = await parseReceiptWithAI(rawText);
 
     return NextResponse.json({
       success: true,
