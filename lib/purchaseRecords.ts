@@ -1,4 +1,7 @@
 import { supabase } from './supabase';
+import { createGroceryList } from './groceryLists';
+import { createGroceryItem } from './groceryItems';
+import { upsertShoppingItemToCatalog } from './shoppingItems';
 
 export interface PurchaseItem {
   id: string;
@@ -86,6 +89,11 @@ export async function createPurchaseRecord(input: CreatePurchaseRecordInput): Pr
     }
 
     items = insertedItems || [];
+    for (const item of input.items) {
+      if (item.name?.trim()) {
+        upsertShoppingItemToCatalog(item.name.trim(), 'ללא קטגוריה').catch(() => {});
+      }
+    }
   }
 
   return { ...record, items };
@@ -205,6 +213,39 @@ export async function fetchPurchaseRecordsByListId(listId: string, userId: strin
     ...record,
     items: itemsByRecord.get(record.id) || [],
   }));
+}
+
+/**
+ * Duplicate a standalone purchase record to a new grocery list.
+ * Creates a new list and adds all purchase items as grocery items.
+ */
+export async function duplicatePurchaseToNewList(
+  purchaseRecordId: string,
+  userId: string
+): Promise<{ listId: string; itemCount: number }> {
+  const records = await fetchStandalonePurchaseRecords(userId);
+  const record = records.find(r => r.id === purchaseRecordId);
+  if (!record) {
+    throw new Error('Purchase record not found');
+  }
+
+  const dateStr = record.purchase_date
+    ? new Date(record.purchase_date).toLocaleDateString('he-IL')
+    : new Date().toLocaleDateString('he-IL');
+  const title = record.store_name
+    ? `מקבלת ${record.store_name} - ${dateStr}`
+    : `קנייה - ${dateStr}`;
+
+  const newList = await createGroceryList(userId, title);
+  let itemCount = 0;
+
+  for (const item of record.items) {
+    if (!item.name?.trim()) continue;
+    await createGroceryItem(newList.id, item.name.trim(), item.quantity ?? 1, 'ללא קטגוריה');
+    itemCount++;
+  }
+
+  return { listId: newList.id, itemCount };
 }
 
 export async function deletePurchaseRecord(recordId: string, userId: string): Promise<void> {

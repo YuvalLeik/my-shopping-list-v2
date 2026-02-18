@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Calendar, Edit2, Check, X, Copy, ArrowRight } from 'lucide-react';
+import { Loader2, Calendar, Edit2, Check, X, Copy, ArrowRight, Receipt } from 'lucide-react';
 import { fetchGroceryListsWithItemCount, GroceryListWithCount, duplicateGroceryList } from '@/lib/groceryLists';
+import { duplicatePurchaseToNewList, PurchaseRecordWithItems } from '@/lib/purchaseRecords';
 import { t } from '@/lib/translations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,26 +20,38 @@ interface SidebarProps {
   refreshTrigger?: number; // Add refresh trigger
   onListTitleUpdate?: (listId: string, newTitle: string) => Promise<void>; // Callback to update list title
   onListDuplicated?: (newListId: string, itemCount: number) => Promise<void>; // Callback when list is duplicated
+  standalonePurchases?: PurchaseRecordWithItems[]; // Standalone (non-list-linked) purchase records
+  viewingStandaloneId?: string | null; // Currently viewed standalone purchase id
+  onStandaloneSelect?: (purchaseId: string) => void;
+  onStandaloneDuplicated?: (newListId: string, itemCount: number) => Promise<void>; // Callback when standalone is copied to new list
   isOpen?: boolean; // For mobile drawer
   onClose?: () => void; // For mobile drawer
 }
 
-export function Sidebar({ activeUserId, selectedListId, onListSelect, refreshTrigger, onListTitleUpdate, onListDuplicated, isOpen = false, onClose }: SidebarProps) {
-  // Debug: Log immediately when component mounts
-  console.log('[Sidebar] Component MOUNTED/RENDERING', { 
-    activeUserId, 
-    isOpen, 
-    hasTaskBarSection: typeof TaskBarSection !== 'undefined',
-    hasDashboard: typeof Dashboard !== 'undefined'
-  });
+export function Sidebar({
+  activeUserId,
+  selectedListId,
+  onListSelect,
+  refreshTrigger,
+  onListTitleUpdate,
+  onListDuplicated,
+  standalonePurchases = [],
+  viewingStandaloneId = null,
+  onStandaloneSelect,
+  onStandaloneDuplicated,
+  isOpen = false,
+  onClose,
+}: SidebarProps) {
   const [previousLists, setPreviousLists] = useState<GroceryListWithCount[]>([]);
   const [loadingLists, setLoadingLists] = useState(false);
   const [editingListId, setEditingListId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [updatingTitle, setUpdatingTitle] = useState(false);
   const [duplicatingListId, setDuplicatingListId] = useState<string | null>(null);
+  const [duplicatingPurchaseId, setDuplicatingPurchaseId] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState({
     previousLists: true,
+    standalonePurchases: true,
   });
 
   useEffect(() => {
@@ -105,10 +118,8 @@ export function Sidebar({ activeUserId, selectedListId, onListSelect, refreshTri
   };
 
   const handleDuplicateList = async (listId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering onListSelect
-    if (!activeUserId) {
-      return;
-    }
+    e.stopPropagation();
+    if (!activeUserId) return;
 
     setDuplicatingListId(listId);
     try {
@@ -117,20 +128,37 @@ export function Sidebar({ activeUserId, selectedListId, onListSelect, refreshTri
         try {
           await onListDuplicated(result.list.id, result.itemCount);
         } catch {
-          // Callback handles its own errors, just reset state
           setDuplicatingListId(null);
           return;
         }
       }
-      // Reset state after successful duplication
       setDuplicatingListId(null);
     } catch (err) {
-      // Reset state on error
       setDuplicatingListId(null);
-      // Show error toast
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       toast.error('נכשל בשכפול הרשימה', {
-        description: errorMessage,
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  };
+
+  const handleDuplicatePurchase = async (purchaseId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!activeUserId || !onStandaloneDuplicated) return;
+
+    setDuplicatingPurchaseId(purchaseId);
+    try {
+      const result = await duplicatePurchaseToNewList(purchaseId, activeUserId);
+      try {
+        await onStandaloneDuplicated(result.listId, result.itemCount);
+      } catch {
+        setDuplicatingPurchaseId(null);
+        return;
+      }
+      setDuplicatingPurchaseId(null);
+    } catch (err) {
+      setDuplicatingPurchaseId(null);
+      toast.error('נכשל בשכפול הקנייה', {
+        description: err instanceof Error ? err.message : 'Unknown error',
       });
     }
   };
@@ -274,13 +302,76 @@ export function Sidebar({ activeUserId, selectedListId, onListSelect, refreshTri
     </div>
   );
 
+  const StandalonePurchasesContent = () => (
+    <div className="p-4">
+      {standalonePurchases.length === 0 ? (
+        <p className="text-sm text-slate-600 dark:text-slate-400">{t.noStandalonePurchases}</p>
+      ) : (
+        <div className="space-y-2">
+          {standalonePurchases.map((record) => (
+            <div
+              key={record.id}
+              className={`w-full border rounded-lg p-3 transition-colors ${
+                viewingStandaloneId === record.id
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-card border-border hover:bg-accent'
+              }`}
+            >
+              <div className="flex flex-col items-start w-full">
+                <div className="flex items-center gap-2 w-full group">
+                  <Receipt className="h-4 w-4 opacity-70 flex-shrink-0" />
+                  <span
+                    className="text-sm font-medium flex-1 cursor-pointer hover:underline"
+                    onClick={() => {
+                      onStandaloneSelect?.(record.id);
+                      if (onClose) onClose();
+                    }}
+                  >
+                    {record.store_name || t.importPurchase} ({record.purchase_date ? new Date(record.purchase_date).toLocaleDateString('he-IL') : ''})
+                  </span>
+                </div>
+                <div className="flex items-center justify-between w-full mt-1">
+                  <span
+                    className={`text-xs ${viewingStandaloneId === record.id ? 'opacity-80' : 'text-muted-foreground'}`}
+                    onClick={() => {
+                      onStandaloneSelect?.(record.id);
+                      if (onClose) onClose();
+                    }}
+                  >
+                    {record.items.length} {record.items.length === 1 ? t.item : 'פריטים'}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={(e) => handleDuplicatePurchase(record.id, e)}
+                    disabled={duplicatingPurchaseId === record.id}
+                    title="שכפל לרשימה חדשה"
+                  >
+                    {duplicatingPurchaseId === record.id ? (
+                      <>
+                        <Loader2 className="h-3 w-3 me-1 animate-spin" />
+                        <span>משכפל...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3 me-1" />
+                        <span className="hidden sm:inline">שכפל</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   // Task Bar content component (reusable for desktop and mobile)
   // This component renders collapsible sections: Dashboard link and Previous Lists
   const SidebarContent = () => {
-    // Debug: Log to verify component is rendering
-    console.log('[Sidebar] SidebarContent rendering', { activeUserId, previousListsCount: previousLists.length });
-    
-    // Ensure we always render TaskBarSection components when activeUserId exists
     if (!activeUserId) {
       return (
         <div className="h-full flex flex-col bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm overflow-y-auto p-4">
@@ -313,19 +404,21 @@ export function Sidebar({ activeUserId, selectedListId, onListSelect, refreshTri
         <TaskBarSection
           title={`${t.previousLists} (${previousLists.length})`}
           isExpanded={expandedSections.previousLists}
-          onToggle={() => {
-            console.log('[Sidebar] Previous Lists toggle clicked');
-            setExpandedSections(prev => ({ ...prev, previousLists: !prev.previousLists }));
-          }}
+          onToggle={() => setExpandedSections(prev => ({ ...prev, previousLists: !prev.previousLists }))}
         >
           <PreviousListsContent />
+        </TaskBarSection>
+
+        <TaskBarSection
+          title={`${t.standalonePurchases} (${standalonePurchases.length})`}
+          isExpanded={expandedSections.standalonePurchases}
+          onToggle={() => setExpandedSections(prev => ({ ...prev, standalonePurchases: !prev.standalonePurchases }))}
+        >
+          <StandalonePurchasesContent />
         </TaskBarSection>
       </div>
     );
   };
-
-  // Debug: Log to verify Sidebar component is rendering
-  console.log('[Sidebar] Component rendering', { activeUserId, isOpen, expandedSections });
 
   return (
     <>

@@ -101,6 +101,8 @@ export default function Home() {
   const [showImportReceipt, setShowImportReceipt] = useState(false);
   const [previousListPurchases, setPreviousListPurchases] = useState<PurchaseRecordWithItems[]>([]);
   const [standalonePurchases, setStandalonePurchases] = useState<PurchaseRecordWithItems[]>([]);
+  const [viewingStandalonePurchaseId, setViewingStandalonePurchaseId] = useState<string | null>(null);
+  const [viewingStandalonePurchase, setViewingStandalonePurchase] = useState<PurchaseRecordWithItems | null>(null);
   const [completedListsForDropdown, setCompletedListsForDropdown] = useState<GroceryList[]>([]);
 
   // Load all item names for autocomplete from global catalog (shopping_items)
@@ -556,8 +558,9 @@ export default function Home() {
   };
 
   const handleListSelect = (listId: string) => {
-    // This is for previous lists - show them alongside, not replace
     setViewingPreviousListId(listId);
+    setViewingStandalonePurchaseId(null);
+    setViewingStandalonePurchase(null);
     setPreviousListMeta(null);
     setPriorCostInput('');
     setPreviousListPurchases([]);
@@ -617,6 +620,19 @@ export default function Home() {
     setPreviousListItems([]);
     setPriorCostInput('');
     setPreviousListPurchases([]);
+    setViewingStandalonePurchaseId(null);
+    setViewingStandalonePurchase(null);
+  };
+
+  const handleStandaloneSelect = (purchaseId: string) => {
+    setViewingStandalonePurchaseId(purchaseId);
+    setViewingPreviousListId(null);
+    setPreviousListMeta(null);
+    setPreviousListItems([]);
+    setPriorCostInput('');
+    setPreviousListPurchases([]);
+    const record = standalonePurchases.find(p => p.id === purchaseId) ?? null;
+    setViewingStandalonePurchase(record);
   };
 
   const handleDeletePreviousList = async () => {
@@ -921,13 +937,61 @@ export default function Home() {
     </Card>
   );
 
+  // Standalone purchase detail card (when viewing a standalone purchase from sidebar)
+  const standalonePurchaseCardContent = viewingStandalonePurchase && (
+    <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <CardHeader>
+        <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
+          <CardTitle className="text-lg text-slate-900 dark:text-slate-50 text-right">
+            {viewingStandalonePurchase.store_name || t.importPurchase}
+          </CardTitle>
+          <Button variant="ghost" size="sm" onClick={handleClosePreviousList}>
+            <X className="h-4 w-4 me-2" />
+            {t.closePreviousList}
+          </Button>
+        </div>
+        <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 [dir=rtl]:flex-row-reverse">
+          {viewingStandalonePurchase.purchase_date && (
+            <span>{new Date(viewingStandalonePurchase.purchase_date).toLocaleDateString('he-IL')}</span>
+          )}
+          {viewingStandalonePurchase.total_amount != null && (
+            <span className="font-medium">{Number(viewingStandalonePurchase.total_amount).toFixed(1)} ₪</span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-3">
+          {viewingStandalonePurchase.items.map((item) => (
+            <li
+              key={item.id}
+              className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 [dir=rtl]:flex-row-reverse opacity-90"
+            >
+              <div className="w-16 h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <ShoppingCart className="h-6 w-6 text-slate-400" />
+              </div>
+              <div className="flex-1 text-right min-w-0">
+                <div className="font-medium text-slate-700 dark:text-slate-200">{item.name}</div>
+                <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  {item.total_price != null ? `${Number(item.total_price).toFixed(2)} ₪` : ''}
+                </div>
+              </div>
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400 w-8 text-center">
+                {item.quantity}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="min-h-screen flex bg-white dark:bg-slate-950">
       {/* Sidebar */}
-      <Sidebar 
-        activeUserId={activeUserId} 
+      <Sidebar
+        activeUserId={activeUserId}
         onUserChange={setActiveUserId}
-        selectedListId={viewingPreviousListId} // Show which previous list is being viewed
+        selectedListId={viewingPreviousListId}
         onListSelect={handleListSelect}
         refreshTrigger={sidebarRefreshTrigger}
         isOpen={sidebarOpen}
@@ -949,40 +1013,48 @@ export default function Home() {
         onListDuplicated={async (newListId: string, itemCount: number) => {
           if (!activeUserId) return;
           try {
-            // Show success message for list creation
             toast.info('נוצרה רשימה חדשה');
-            
-            // Refresh lists to show the new duplicated list
             setSidebarRefreshTrigger(prev => prev + 1);
-            
-            // Load the new list's title
             const updatedLists = await fetchGroceryLists(activeUserId);
             const newList = updatedLists.find(l => l.id === newListId);
             if (newList) {
               setLists(updatedLists);
               setListTitle(newList.title);
             }
-            
-            // Show success message for items duplication
-            if (itemCount > 0) {
-              toast.info(`הועתקו ${itemCount} פריטים`);
-            }
-            
-            // Switch to the new list
+            if (itemCount > 0) toast.info(`הועתקו ${itemCount} פריטים`);
             setSelectedListId(newListId);
-            // Close any previous list view
             setViewingPreviousListId(null);
             setPreviousListItems([]);
-            
-            // Final success message
+            setViewingStandalonePurchaseId(null);
+            setViewingStandalonePurchase(null);
             toast.success('הרשימה שוכפלה בהצלחה');
           } catch (err) {
-            // Show error toast with detailed message
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            toast.error('נכשל בשכפול הרשימה', {
-              description: errorMessage,
-            });
-            // Don't re-throw - we've handled the error display
+            toast.error('נכשל בשכפול הרשימה', { description: err instanceof Error ? err.message : 'Unknown error' });
+          }
+        }}
+        standalonePurchases={standalonePurchases}
+        viewingStandaloneId={viewingStandalonePurchaseId}
+        onStandaloneSelect={handleStandaloneSelect}
+        onStandaloneDuplicated={async (newListId: string, itemCount: number) => {
+          if (!activeUserId) return;
+          try {
+            toast.info('נוצרה רשימה חדשה');
+            setSidebarRefreshTrigger(prev => prev + 1);
+            const updatedLists = await fetchGroceryLists(activeUserId);
+            const newList = updatedLists.find(l => l.id === newListId);
+            if (newList) {
+              setLists(updatedLists);
+              setListTitle(newList.title);
+            }
+            if (itemCount > 0) toast.info(`הועתקו ${itemCount} פריטים`);
+            setSelectedListId(newListId);
+            setViewingPreviousListId(null);
+            setPreviousListItems([]);
+            setViewingStandalonePurchaseId(null);
+            setViewingStandalonePurchase(null);
+            toast.success('הקנייה שוכפלה לרשימה בהצלחה');
+          } catch (err) {
+            toast.error('נכשל בשכפול הקנייה', { description: err instanceof Error ? err.message : 'Unknown error' });
           }
         }}
       />
@@ -995,10 +1067,7 @@ export default function Home() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              console.log('[Mobile] Menu button clicked, current sidebarOpen:', sidebarOpen);
-              setSidebarOpen(!sidebarOpen);
-            }}
+            onClick={() => setSidebarOpen(!sidebarOpen)}
             className="absolute top-4 right-4 md:hidden z-[100] flex-shrink-0 rounded-lg border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg hover:bg-slate-50 dark:hover:bg-slate-700 p-2 [dir=rtl]:right-auto [dir=rtl]:left-4"
             title="רשימות קודמות"
           >
@@ -1066,7 +1135,7 @@ export default function Home() {
 
         <main className={`relative z-0 container mx-auto px-6 py-8 max-w-5xl`}>
 
-          <div className={`grid gap-6 grid-cols-1 ${viewingPreviousListId ? 'md:grid-cols-2' : ''}`}>
+          <div className={`grid gap-6 grid-cols-1 ${(viewingPreviousListId || viewingStandalonePurchaseId) ? 'md:grid-cols-2' : ''}`}>
             {/* Active List - Always shown */}
             {activeUserId && selectedListId && (
               <div className="space-y-6">
@@ -1929,75 +1998,21 @@ export default function Home() {
                   </CardContent>
                 </Card>
 
-                {/* Standalone purchases - visible when not viewing a prior list */}
-                {!viewingPreviousListId && (
-                  <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                    <CardHeader>
-                      <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
-                        <CardTitle className="text-lg text-slate-900 dark:text-slate-50 text-right">
-                          {t.standalonePurchases}
-                        </CardTitle>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (activeUserId) {
-                              fetchGroceryListsWithItemCount(activeUserId, true)
-                                .then(all => setCompletedListsForDropdown(all.filter(l => l.completed_at)))
-                                .catch(() => setCompletedListsForDropdown([]));
-                            }
-                            setShowImportReceipt(true);
-                          }}
-                          className="text-emerald-600 hover:text-emerald-700"
-                        >
-                          <Receipt className="h-4 w-4 me-1" />
-                          {t.importReceipt}
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      {standalonePurchases.length > 0 ? (
-                        <div className="space-y-2">
-                          {standalonePurchases.map(record => (
-                            <div key={record.id} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-right">
-                              <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
-                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                  {record.store_name ? t.purchaseRecordFrom(record.store_name) : t.importPurchase}
-                                </span>
-                                <span className="text-xs text-slate-500">
-                                  {record.purchase_date ? new Date(record.purchase_date).toLocaleDateString('he-IL') : ''}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400 [dir=rtl]:flex-row-reverse">
-                                <span>{t.purchaseRecordItems(record.items.length)}</span>
-                                {record.total_amount != null && (
-                                  <span className="font-medium">{Number(record.total_amount).toFixed(1)} ₪</span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-400 dark:text-slate-500 text-right">{t.noStandalonePurchases}</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
               </div>
             )}
 
-            {/* Previous List View - Desktop: inline second column */}
-            {viewingPreviousListId && (
+            {/* Second column: Previous List or Standalone Purchase */}
+            {(viewingPreviousListId || viewingStandalonePurchaseId) && (
               <div className="hidden md:block space-y-6">
-                {previousListCardContent}
+                {viewingPreviousListId ? previousListCardContent : standalonePurchaseCardContent}
               </div>
             )}
           </div>
 
-          {/* Previous List View - Mobile: full-width drawer overlay */}
+          {/* Second column - Mobile: full-width drawer overlay */}
           <div className="md:hidden">
             <Drawer
-              open={!!viewingPreviousListId}
+              open={!!(viewingPreviousListId || viewingStandalonePurchaseId)}
               onOpenChange={(open) => {
                 if (!open) handleClosePreviousList();
               }}
@@ -2007,7 +2022,7 @@ export default function Home() {
                 className="w-[90vw] max-w-[420px] p-0 border-0 z-[100] overflow-y-auto"
               >
                 <div className="p-4 pt-12">
-                  {previousListCardContent}
+                  {viewingPreviousListId ? previousListCardContent : standalonePurchaseCardContent}
                 </div>
               </DrawerContent>
             </Drawer>
