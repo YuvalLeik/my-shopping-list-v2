@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
 import { fetchGroceryLists, fetchGroceryListsWithItemCount, createGroceryList, deleteGroceryList, markListAsCompleted, updateGroceryListTitle, getGroceryListById, updateListTotalCost, GroceryList } from '@/lib/groceryLists';
-import { fetchPurchaseRecordsByListId, PurchaseRecordWithItems } from '@/lib/purchaseRecords';
+import { fetchPurchaseRecordsByListId, fetchStandalonePurchaseRecords, PurchaseRecordWithItems } from '@/lib/purchaseRecords';
 import { fetchGroceryItems, createGroceryItem, deleteGroceryItem, updateGroceryItem, getAllItemNames, getItemCategoryByName, GroceryItem } from '@/lib/groceryItems';
 import { uploadItemImage } from '@/lib/storage';
 import { getShoppingItemByName, upsertShoppingItemImageByName, normalizeItemName } from '@/lib/shoppingItems';
@@ -100,6 +100,7 @@ export default function Home() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showImportReceipt, setShowImportReceipt] = useState(false);
   const [previousListPurchases, setPreviousListPurchases] = useState<PurchaseRecordWithItems[]>([]);
+  const [standalonePurchases, setStandalonePurchases] = useState<PurchaseRecordWithItems[]>([]);
   const [completedListsForDropdown, setCompletedListsForDropdown] = useState<GroceryList[]>([]);
 
   // Load all item names for autocomplete from global catalog (shopping_items)
@@ -120,6 +121,17 @@ export default function Home() {
       }
     }
     loadItemNames();
+  }, [activeUserId]);
+
+  // Load standalone purchases when active user changes
+  useEffect(() => {
+    if (!activeUserId) {
+      setStandalonePurchases([]);
+      return;
+    }
+    fetchStandalonePurchaseRecords(activeUserId)
+      .then(setStandalonePurchases)
+      .catch(() => setStandalonePurchases([]));
   }, [activeUserId]);
 
   // Load users and active user name
@@ -1916,6 +1928,61 @@ export default function Home() {
                   })()}
                   </CardContent>
                 </Card>
+
+                {/* Standalone purchases - visible when not viewing a prior list */}
+                {!viewingPreviousListId && (
+                  <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                    <CardHeader>
+                      <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
+                        <CardTitle className="text-lg text-slate-900 dark:text-slate-50 text-right">
+                          {t.standalonePurchases}
+                        </CardTitle>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (activeUserId) {
+                              fetchGroceryListsWithItemCount(activeUserId, true)
+                                .then(all => setCompletedListsForDropdown(all.filter(l => l.completed_at)))
+                                .catch(() => setCompletedListsForDropdown([]));
+                            }
+                            setShowImportReceipt(true);
+                          }}
+                          className="text-emerald-600 hover:text-emerald-700"
+                        >
+                          <Receipt className="h-4 w-4 me-1" />
+                          {t.importReceipt}
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {standalonePurchases.length > 0 ? (
+                        <div className="space-y-2">
+                          {standalonePurchases.map(record => (
+                            <div key={record.id} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-right">
+                              <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                  {record.store_name ? t.purchaseRecordFrom(record.store_name) : t.importPurchase}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  {record.purchase_date ? new Date(record.purchase_date).toLocaleDateString('he-IL') : ''}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400 [dir=rtl]:flex-row-reverse">
+                                <span>{t.purchaseRecordItems(record.items.length)}</span>
+                                {record.total_amount != null && (
+                                  <span className="font-medium">{Number(record.total_amount).toFixed(1)} ₪</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 dark:text-slate-500 text-right">{t.noStandalonePurchases}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
 
@@ -2097,14 +2164,16 @@ export default function Home() {
           completedLists={completedListsForDropdown}
           onClose={() => setShowImportReceipt(false)}
           onRecordSaved={async () => {
-            // Refresh purchase records for the viewed list
-            if (viewingPreviousListId && activeUserId) {
-              try {
+            if (!activeUserId) return;
+            try {
+              if (viewingPreviousListId) {
                 const records = await fetchPurchaseRecordsByListId(viewingPreviousListId, activeUserId);
                 setPreviousListPurchases(records);
-              } catch {
-                // Failed to reload
               }
+              const standalone = await fetchStandalonePurchaseRecords(activeUserId);
+              setStandalonePurchases(standalone);
+            } catch {
+              // Failed to reload
             }
           }}
         />

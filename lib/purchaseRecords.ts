@@ -129,6 +129,45 @@ export async function fetchPurchaseRecords(userId: string): Promise<PurchaseReco
   }));
 }
 
+export async function fetchStandalonePurchaseRecords(userId: string): Promise<PurchaseRecordWithItems[]> {
+  const { data: records, error } = await supabase
+    .from('purchase_records')
+    .select('*')
+    .eq('local_user_id', userId)
+    .is('grocery_list_id', null)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to fetch standalone purchase records: ${error.message}`);
+  }
+
+  if (!records || records.length === 0) return [];
+
+  const recordIds = records.map(r => r.id);
+
+  const { data: allItems, error: itemsError } = await supabase
+    .from('purchase_items')
+    .select('*')
+    .in('purchase_record_id', recordIds)
+    .order('created_at', { ascending: true });
+
+  if (itemsError) {
+    throw new Error(`Failed to fetch purchase items: ${itemsError.message}`);
+  }
+
+  const itemsByRecord = new Map<string, PurchaseItem[]>();
+  (allItems || []).forEach(item => {
+    const list = itemsByRecord.get(item.purchase_record_id) || [];
+    list.push(item);
+    itemsByRecord.set(item.purchase_record_id, list);
+  });
+
+  return records.map(record => ({
+    ...record,
+    items: itemsByRecord.get(record.id) || [],
+  }));
+}
+
 export async function fetchPurchaseRecordsByListId(listId: string, userId: string): Promise<PurchaseRecordWithItems[]> {
   const { data: records, error } = await supabase
     .from('purchase_records')

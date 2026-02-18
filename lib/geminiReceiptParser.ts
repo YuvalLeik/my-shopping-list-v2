@@ -2,6 +2,11 @@ import { parseReceipt, ParsedReceipt } from './receiptParser';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
+export type ParserMeta = {
+  parserUsed: 'gemini' | 'regex' | 'vision_failed';
+  parserError?: string;
+};
+
 const SYSTEM_PROMPT = `You are a Hebrew supermarket receipt parser. You receive either raw text or a visual document (PDF/image) from an Israeli supermarket receipt or online grocery order, and extract structured data.
 
 Return ONLY valid JSON with this exact structure (no markdown, no explanation, no code fences):
@@ -78,16 +83,26 @@ function cleanJsonResponse(text: string): string {
 /**
  * Parse a receipt file (PDF or image) using Gemini multimodal vision.
  * Sends the raw file bytes so Gemini can see the visual layout.
+ * Returns parserUsed and parserError on failure so the client can surface the error.
  */
 export async function parseReceiptMultimodal(
   base64Data: string,
   mimeType: string
-): Promise<ParsedReceipt> {
+): Promise<ParsedReceipt & ParserMeta> {
   const apiKey = getApiKey();
+
+  const emptyWithError = (errMsg: string): ParsedReceipt & ParserMeta => ({
+    storeName: null,
+    purchaseDate: null,
+    items: [],
+    totalAmount: null,
+    parserUsed: 'vision_failed',
+    parserError: errMsg,
+  });
 
   if (!apiKey) {
     console.log('[geminiReceiptParser] No GOOGLE_GEMINI_API_KEY, cannot do multimodal parse');
-    return { storeName: null, purchaseDate: null, items: [], totalAmount: null };
+    return emptyWithError('Gemini API key not configured');
   }
 
   try {
@@ -117,35 +132,48 @@ export async function parseReceiptMultimodal(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[geminiReceiptParser] Gemini multimodal error (${response.status}):`, errorText);
-      return { storeName: null, purchaseDate: null, items: [], totalAmount: null };
+      let errMsg = `Gemini API error (${response.status})`;
+      try {
+        const errJson = JSON.parse(errorText);
+        const detail = errJson?.error?.message ?? errJson?.message ?? errorText?.slice(0, 120);
+        if (detail) errMsg = detail;
+      } catch {
+        if (errorText) errMsg = errorText.slice(0, 200);
+      }
+      console.error('[geminiReceiptParser] multimodal:', errMsg);
+      return emptyWithError(errMsg);
     }
 
     const data = await response.json();
     const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!textContent) {
-      console.error('[geminiReceiptParser] No text in multimodal Gemini response');
-      return { storeName: null, purchaseDate: null, items: [], totalAmount: null };
+      const errMsg = 'Gemini returned no content';
+      console.error('[geminiReceiptParser]', errMsg);
+      return emptyWithError(errMsg);
     }
 
     const parsed = JSON.parse(cleanJsonResponse(textContent));
-    return validateAndNormalize(parsed);
+    return { ...validateAndNormalize(parsed), parserUsed: 'gemini' };
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('[geminiReceiptParser] Multimodal parse failed:', err);
-    return { storeName: null, purchaseDate: null, items: [], totalAmount: null };
+    return emptyWithError(errMsg);
   }
 }
 
 /**
  * Parse receipt text using Google Gemini AI.
  * Falls back to regex parser if Gemini is unavailable.
+ * Returns parserUsed and parserError so the client can show why parsing may be poor.
  */
-export async function parseReceiptWithAI(rawText: string): Promise<ParsedReceipt> {
+export async function parseReceiptWithAI(
+  rawText: string
+): Promise<ParsedReceipt & ParserMeta> {
   const apiKey = getApiKey();
 
   if (!apiKey) {
     console.log('[geminiReceiptParser] No GOOGLE_GEMINI_API_KEY, falling back to regex parser');
-    return parseReceipt(rawText);
+    return { ...parseReceipt(rawText), parserUsed: 'regex', parserError: 'Gemini API key not configured' };
   }
 
   try {
@@ -170,21 +198,31 @@ export async function parseReceiptWithAI(rawText: string): Promise<ParsedReceipt
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[geminiReceiptParser] Gemini API error (${response.status}):`, errorText);
-      return parseReceipt(rawText);
+      let errMsg = `Gemini API error (${response.status})`;
+      try {
+        const errJson = JSON.parse(errorText);
+        const detail = errJson?.error?.message ?? errJson?.message ?? errorText?.slice(0, 120);
+        if (detail) errMsg = detail;
+      } catch {
+        if (errorText) errMsg = errorText.slice(0, 200);
+      }
+      console.error('[geminiReceiptParser]', errMsg);
+      return { ...parseReceipt(rawText), parserUsed: 'regex', parserError: errMsg };
     }
 
     const data = await response.json();
     const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!textContent) {
-      console.error('[geminiReceiptParser] No text in Gemini response, falling back');
-      return parseReceipt(rawText);
+      const errMsg = 'Gemini returned no content';
+      console.error('[geminiReceiptParser]', errMsg);
+      return { ...parseReceipt(rawText), parserUsed: 'regex', parserError: errMsg };
     }
 
     const parsed = JSON.parse(cleanJsonResponse(textContent));
-    return validateAndNormalize(parsed);
+    return { ...validateAndNormalize(parsed), parserUsed: 'gemini' };
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     console.error('[geminiReceiptParser] Failed, falling back to regex parser:', err);
-    return parseReceipt(rawText);
+    return { ...parseReceipt(rawText), parserUsed: 'regex', parserError: errMsg };
   }
 }

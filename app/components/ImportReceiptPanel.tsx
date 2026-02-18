@@ -63,13 +63,18 @@ export function ImportReceiptPanel({
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Parse failed');
 
-      const data: ParsedReceipt = json.data;
+      const data = json.data as ParsedReceipt & { parserUsed?: string; parserError?: string };
       setParsedStoreName(data.storeName || '');
       setParsedDate(data.purchaseDate || '');
       setParsedItems(data.items);
       setParsedTotal(data.totalAmount != null ? String(data.totalAmount) : '');
       setStep('parsed');
 
+      if (data.parserUsed === 'regex' || data.parserUsed === 'vision_failed') {
+        toast.warning(t.receiptParserFallback, {
+          description: data.parserError || undefined,
+        });
+      }
       if (data.items.length === 0) {
         toast.info(t.receiptNoItemsFound);
       }
@@ -108,7 +113,7 @@ export function ImportReceiptPanel({
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Parse failed');
 
-      const data = json.data as ParsedReceipt & { rawText?: string };
+      const data = json.data as ParsedReceipt & { rawText?: string; parserUsed?: string; parserError?: string };
       setRawText(data.rawText || '');
       setParsedStoreName(data.storeName || '');
       setParsedDate(data.purchaseDate || '');
@@ -116,6 +121,11 @@ export function ImportReceiptPanel({
       setParsedTotal(data.totalAmount != null ? String(data.totalAmount) : '');
       setStep('parsed');
 
+      if (data.parserUsed === 'regex' || data.parserUsed === 'vision_failed') {
+        toast.warning(t.receiptParserFallback, {
+          description: data.parserError || undefined,
+        });
+      }
       if (data.items.length === 0) {
         toast.info(t.receiptNoItemsFound);
       }
@@ -147,7 +157,7 @@ export function ImportReceiptPanel({
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Parse failed');
 
-      const data = json.data as ParsedReceipt & { rawText?: string };
+      const data = json.data as ParsedReceipt & { rawText?: string; parserUsed?: string; parserError?: string };
       setRawText(data.rawText || '');
       setParsedStoreName(data.storeName || '');
       setParsedDate(data.purchaseDate || '');
@@ -155,6 +165,11 @@ export function ImportReceiptPanel({
       setParsedTotal(data.totalAmount != null ? String(data.totalAmount) : '');
       setStep('parsed');
 
+      if (data.parserUsed === 'regex' || data.parserUsed === 'vision_failed') {
+        toast.warning(t.receiptParserFallback, {
+          description: data.parserError || undefined,
+        });
+      }
       if (data.items.length === 0) {
         toast.info(t.receiptNoItemsFound);
       }
