@@ -110,6 +110,8 @@ export const t = {
   purchaseRecords: 'קניות שיובאו',
   standalonePurchases: 'קניות עצמאיות',
   noStandalonePurchases: 'אין קניות עצמאיות',
+  deleteStandalonePurchase: 'מחק קנייה',
+  confirmDeleteStandalonePurchase: 'האם אתה בטוח שברצונך למחוק את הקנייה העצמאית?',
   purchaseRecordItems: (n: number) => `${n} פריטים`,
   purchaseRecordFrom: (store: string) => `מ${store}`,
   noPurchaseRecords: 'אין קניות מיובאות',

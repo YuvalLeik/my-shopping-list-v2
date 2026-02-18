@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
 import { fetchGroceryLists, fetchGroceryListsWithItemCount, createGroceryList, deleteGroceryList, markListAsCompleted, updateGroceryListTitle, getGroceryListById, updateListTotalCost, GroceryList } from '@/lib/groceryLists';
-import { fetchPurchaseRecordsByListId, fetchStandalonePurchaseRecords, PurchaseRecordWithItems } from '@/lib/purchaseRecords';
+import { fetchPurchaseRecordsByListId, fetchStandalonePurchaseRecords, deletePurchaseRecord, PurchaseRecordWithItems } from '@/lib/purchaseRecords';
 import { fetchGroceryItems, createGroceryItem, deleteGroceryItem, updateGroceryItem, getAllItemNames, getItemCategoryByName, GroceryItem } from '@/lib/groceryItems';
 import { uploadItemImage } from '@/lib/storage';
 import { getShoppingItemByName, upsertShoppingItemImageByName, normalizeItemName } from '@/lib/shoppingItems';
@@ -79,6 +79,9 @@ export default function Home() {
   const [showDeletePreviousDialog, setShowDeletePreviousDialog] = useState(false);
   const [listToDelete, setListToDelete] = useState<string | null>(null);
   const [deletingPreviousList, setDeletingPreviousList] = useState(false);
+  const [showDeletePurchaseDialog, setShowDeletePurchaseDialog] = useState(false);
+  const [purchaseToDelete, setPurchaseToDelete] = useState<string | null>(null);
+  const [deletingStandalonePurchase, setDeletingStandalonePurchase] = useState(false);
   const [editingListTitle, setEditingListTitle] = useState(false);
   const [listTitle, setListTitle] = useState('');
   const [updatingListTitle, setUpdatingListTitle] = useState(false);
@@ -665,6 +668,31 @@ export default function Home() {
     }
   };
 
+  const handleDeleteStandalonePurchase = async () => {
+    if (!purchaseToDelete || !activeUserId) return;
+
+    setDeletingStandalonePurchase(true);
+    try {
+      await deletePurchaseRecord(purchaseToDelete, activeUserId);
+      if (viewingStandalonePurchaseId === purchaseToDelete) {
+        setViewingStandalonePurchaseId(null);
+        setViewingStandalonePurchase(null);
+      }
+      setPurchaseToDelete(null);
+      setShowDeletePurchaseDialog(false);
+      const records = await fetchStandalonePurchaseRecords(activeUserId);
+      setStandalonePurchases(records);
+      setSidebarRefreshTrigger(prev => prev + 1);
+      toast.success(t.listDeleted);
+    } catch (err) {
+      toast.error('נכשל במחיקת הקנייה', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setDeletingStandalonePurchase(false);
+    }
+  };
+
   const handleMarkListCompleted = async () => {
     if (!selectedListId || !activeUserId) return;
 
@@ -945,10 +973,24 @@ export default function Home() {
           <CardTitle className="text-lg text-slate-900 dark:text-slate-50 text-right">
             {viewingStandalonePurchase.store_name || t.importPurchase}
           </CardTitle>
-          <Button variant="ghost" size="sm" onClick={handleClosePreviousList}>
-            <X className="h-4 w-4 me-2" />
-            {t.closePreviousList}
-          </Button>
+          <div className="flex gap-2 [dir=rtl]:flex-row-reverse">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPurchaseToDelete(viewingStandalonePurchaseId);
+                setShowDeletePurchaseDialog(true);
+              }}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+            >
+              <Trash2 className="h-4 w-4 me-2" />
+              {t.deleteStandalonePurchase}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleClosePreviousList}>
+              <X className="h-4 w-4 me-2" />
+              {t.closePreviousList}
+            </Button>
+          </div>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 [dir=rtl]:flex-row-reverse">
           {viewingStandalonePurchase.purchase_date && (
@@ -2114,6 +2156,35 @@ export default function Home() {
               className="bg-red-600 hover:bg-red-700"
             >
               {deletingPreviousList ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin me-2" />
+                  {t.delete}
+                </>
+              ) : (
+                t.delete
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Standalone Purchase Confirmation Dialog */}
+      <AlertDialog open={showDeletePurchaseDialog} onOpenChange={setShowDeletePurchaseDialog}>
+        <AlertDialogContent className="[dir=rtl]:text-right">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.deleteStandalonePurchase}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.confirmDeleteStandalonePurchase}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="[dir=rtl]:flex-row-reverse">
+            <AlertDialogCancel onClick={() => setPurchaseToDelete(null)} disabled={deletingStandalonePurchase}>{t.cancel}</AlertDialogCancel>
+            <Button
+              onClick={handleDeleteStandalonePurchase}
+              disabled={deletingStandalonePurchase}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deletingStandalonePurchase ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin me-2" />
                   {t.delete}

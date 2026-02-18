@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 import { createGroceryList } from './groceryLists';
-import { createGroceryItem } from './groceryItems';
 import { upsertShoppingItemToCatalog } from './shoppingItems';
 
 export interface PurchaseItem {
@@ -217,7 +216,7 @@ export async function fetchPurchaseRecordsByListId(listId: string, userId: strin
 
 /**
  * Duplicate a standalone purchase record to a new grocery list.
- * Creates a new list and adds all purchase items as grocery items.
+ * Uses bulk insert for grocery_items (like duplicateGroceryList).
  */
 export async function duplicatePurchaseToNewList(
   purchaseRecordId: string,
@@ -237,15 +236,30 @@ export async function duplicatePurchaseToNewList(
     : `קנייה - ${dateStr}`;
 
   const newList = await createGroceryList(userId, title);
-  let itemCount = 0;
 
-  for (const item of record.items) {
-    if (!item.name?.trim()) continue;
-    await createGroceryItem(newList.id, item.name.trim(), item.quantity ?? 1, 'ללא קטגוריה');
-    itemCount++;
+  const itemsToInsert = record.items
+    .filter(item => item.name?.trim())
+    .map(item => ({
+      list_id: newList.id,
+      name: item.name!.trim(),
+      category: 'ללא קטגוריה',
+      quantity: item.quantity ?? 1,
+      purchased: false,
+    }));
+
+  if (itemsToInsert.length > 0) {
+    const { error: insertError } = await supabase
+      .from('grocery_items')
+      .insert(itemsToInsert);
+
+    if (insertError) {
+      throw new Error(`נכשל בהעתקת פריטים: ${insertError.message}`);
+    }
   }
 
-  return { listId: newList.id, itemCount };
+  itemsToInsert.forEach(i => upsertShoppingItemToCatalog(i.name, i.category).catch(() => {}));
+
+  return { listId: newList.id, itemCount: itemsToInsert.length };
 }
 
 export async function deletePurchaseRecord(recordId: string, userId: string): Promise<void> {
