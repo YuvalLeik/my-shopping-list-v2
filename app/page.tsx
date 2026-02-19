@@ -32,7 +32,7 @@ import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { Sidebar } from '@/components/Sidebar';
 import { AssistantPanel } from '@/app/components/AssistantPanel';
 import { ImportReceiptPanel } from '@/app/components/ImportReceiptPanel';
-import { ItemMatchSettings } from '@/app/components/ItemMatchSettings';
+// ItemMatchSettings is now a dedicated page at /settings
 import { t } from '@/lib/translations';
 import { fetchLocalUsers, LocalUser } from '@/lib/localUsers';
 
@@ -103,7 +103,7 @@ export default function Home() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showImportReceipt, setShowImportReceipt] = useState(false);
-  const [showMatchSettings, setShowMatchSettings] = useState(false);
+  // showMatchSettings removed - settings is now a dedicated /settings page
   const [previousListPurchases, setPreviousListPurchases] = useState<PurchaseRecordWithItems[]>([]);
   const [standalonePurchases, setStandalonePurchases] = useState<PurchaseRecordWithItems[]>([]);
   const [viewingStandalonePurchaseId, setViewingStandalonePurchaseId] = useState<string | null>(null);
@@ -1101,7 +1101,6 @@ export default function Home() {
             toast.error('נכשל בשכפול הקנייה', { description: err instanceof Error ? err.message : 'Unknown error' });
           }
         }}
-        onOpenSettings={() => setShowMatchSettings(true)}
       />
 
       {/* Main Content */}
@@ -1173,16 +1172,16 @@ export default function Home() {
                   </Select>
                 ) : null}
                 </div>
-                {/* Settings gear icon */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowMatchSettings(!showMatchSettings)}
-                  className="rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  title={t.itemMatchSettings}
-                >
-                  <Settings2 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                </Button>
+                {/* Settings gear icon - links to /settings page */}
+                {activeUserId && (
+                  <a
+                    href={`/settings?userId=${activeUserId}`}
+                    className="rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center justify-center"
+                    title={t.itemMatchSettings}
+                  >
+                    <Settings2 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -2278,13 +2277,7 @@ export default function Home() {
         />
       )}
 
-      {/* Item Match Settings Panel */}
-      {showMatchSettings && activeUserId && (
-        <ItemMatchSettings
-          userId={activeUserId}
-          onClose={() => setShowMatchSettings(false)}
-        />
-      )}
+      {/* Item Match Settings - now a dedicated page at /settings */}
 
       {/* Shopping Assistant */}
       {showAssistant && (

@@ -139,6 +139,13 @@ export const t = {
   searchMyItems: 'חפש בפריטים שלי',
   attachItem: 'חבר לפריט שלי',
   settings: 'הגדרות',
+  settingsMyItems: 'הפריטים שלי',
+  settingsBackToLists: 'חזור לרשימות קניות',
+  settingsOptional: 'אופציונלי',
+  settingsQuickAttach: 'חיבור מהיר – שם מקבלה לפריט שלי',
+  settingsQuickAttachHelp: 'הקלד את שם הפריט כפי שמופיע בקבלה, ובחר את הפריט שלך להתאמה',
+  settingsReceiptItemName: 'שם פריט מהקבלה...',
+  settingsAlias: 'התאמה',
 
   // Dashboard spending / prices
   spending: 'הוצאות',

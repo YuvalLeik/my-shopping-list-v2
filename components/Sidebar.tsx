@@ -26,7 +26,6 @@ interface SidebarProps {
   onStandaloneDuplicated?: (newListId: string, itemCount: number) => Promise<void>; // Callback when standalone is copied to new list
   isOpen?: boolean; // For mobile drawer
   onClose?: () => void; // For mobile drawer
-  onOpenSettings?: () => void;
 }
 
 export function Sidebar({
@@ -42,7 +41,6 @@ export function Sidebar({
   onStandaloneDuplicated,
   isOpen = false,
   onClose,
-  onOpenSettings,
 }: SidebarProps) {
   const [previousLists, setPreviousLists] = useState<GroceryListWithCount[]>([]);
   const [loadingLists, setLoadingLists] = useState(false);
@@ -420,13 +418,10 @@ export function Sidebar({
         </TaskBarSection>
 
         {/* Settings Section */}
-        {onOpenSettings && (
+        {activeUserId && (
           <div className="border-t border-slate-200/50 dark:border-slate-800/50">
-            <button
-              onClick={() => {
-                onOpenSettings();
-                if (onClose) onClose();
-              }}
+            <a
+              href={`/settings?userId=${activeUserId}`}
               className="w-full flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors [dir=rtl]:flex-row-reverse"
             >
               <div className="flex items-center gap-2 [dir=rtl]:flex-row-reverse">
@@ -434,7 +429,7 @@ export function Sidebar({
                 <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{t.settings}</h3>
               </div>
               <ArrowRight className="h-4 w-4 text-slate-600 dark:text-slate-400 flex-shrink-0" />
-            </button>
+            </a>
           </div>
         )}
       </div>
