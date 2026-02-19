@@ -136,6 +136,9 @@ export const t = {
   rejectMatch: 'דחה',
   matchingItems: 'מתאים פריטים...',
   storeName: 'חנות',
+  searchMyItems: 'חפש בפריטים שלי',
+  attachItem: 'חבר לפריט שלי',
+  settings: 'הגדרות',
 
   // Dashboard spending / prices
   spending: 'הוצאות',

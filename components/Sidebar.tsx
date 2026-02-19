@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Calendar, Edit2, Check, X, Copy, ArrowRight, Receipt } from 'lucide-react';
+import { Loader2, Calendar, Edit2, Check, X, Copy, ArrowRight, Receipt, Settings2 } from 'lucide-react';
 import { fetchGroceryListsWithItemCount, GroceryListWithCount, duplicateGroceryList } from '@/lib/groceryLists';
 import { duplicatePurchaseToNewList, PurchaseRecordWithItems } from '@/lib/purchaseRecords';
 import { t } from '@/lib/translations';
@@ -26,6 +26,7 @@ interface SidebarProps {
   onStandaloneDuplicated?: (newListId: string, itemCount: number) => Promise<void>; // Callback when standalone is copied to new list
   isOpen?: boolean; // For mobile drawer
   onClose?: () => void; // For mobile drawer
+  onOpenSettings?: () => void;
 }
 
 export function Sidebar({
@@ -41,6 +42,7 @@ export function Sidebar({
   onStandaloneDuplicated,
   isOpen = false,
   onClose,
+  onOpenSettings,
 }: SidebarProps) {
   const [previousLists, setPreviousLists] = useState<GroceryListWithCount[]>([]);
   const [loadingLists, setLoadingLists] = useState(false);
@@ -416,6 +418,25 @@ export function Sidebar({
         >
           <StandalonePurchasesContent />
         </TaskBarSection>
+
+        {/* Settings Section */}
+        {onOpenSettings && (
+          <div className="border-t border-slate-200/50 dark:border-slate-800/50">
+            <button
+              onClick={() => {
+                onOpenSettings();
+                if (onClose) onClose();
+              }}
+              className="w-full flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors [dir=rtl]:flex-row-reverse"
+            >
+              <div className="flex items-center gap-2 [dir=rtl]:flex-row-reverse">
+                <Settings2 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{t.settings}</h3>
+              </div>
+              <ArrowRight className="h-4 w-4 text-slate-600 dark:text-slate-400 flex-shrink-0" />
+            </button>
+          </div>
+        )}
       </div>
     );
   };

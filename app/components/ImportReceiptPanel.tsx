@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { X, Loader2, ClipboardPaste, FileText, Camera, Trash2, Plus, Check, AlertCircle } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { X, Loader2, ClipboardPaste, FileText, Camera, Trash2, Plus, Check, AlertCircle, Search, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { t } from '@/lib/translations';
 import type { ParsedReceipt, ParsedItem } from '@/lib/receiptParser';
 import { GroceryList } from '@/lib/groceryLists';
-import { matchReceiptItems, upsertAlias, MatchedItem } from '@/lib/itemAliases';
+import { matchReceiptItems, upsertAlias, MatchedItem, getUserPersonalItems, PersonalItem } from '@/lib/itemAliases';
 import { recordPrices } from '@/lib/itemPrices';
 
 interface ImportReceiptPanelProps {
@@ -297,19 +297,19 @@ export function ImportReceiptPanel({
     ]);
     setMatchedItems(prev => [
       ...prev,
-      { originalName: '', matchedCanonicalName: null, confidence: 0, isConfirmed: false, quantity: 1, unitPrice: null, totalPrice: null },
+      { originalName: '', matchedCanonicalName: null, matchedImageUrl: null, confidence: 0, isConfirmed: false, quantity: 1, unitPrice: null, totalPrice: null },
     ]);
   };
 
-  const handleMatchAction = (index: number, action: 'approve' | 'reject' | 'change', newName?: string) => {
+  const handleMatchAction = (index: number, action: 'approve' | 'reject' | 'change', newName?: string, imageUrl?: string | null) => {
     setMatchedItems(prev => {
       const updated = [...prev];
       if (action === 'approve') {
         updated[index] = { ...updated[index], isConfirmed: true, confidence: 100 };
       } else if (action === 'reject') {
-        updated[index] = { ...updated[index], matchedCanonicalName: null, confidence: 0, isConfirmed: false };
+        updated[index] = { ...updated[index], matchedCanonicalName: null, matchedImageUrl: null, confidence: 0, isConfirmed: false };
       } else if (action === 'change' && newName) {
-        updated[index] = { ...updated[index], matchedCanonicalName: newName, confidence: 100, isConfirmed: true };
+        updated[index] = { ...updated[index], matchedCanonicalName: newName, matchedImageUrl: imageUrl ?? null, confidence: 100, isConfirmed: true };
       }
       return updated;
     });
@@ -325,6 +325,26 @@ export function ImportReceiptPanel({
     setReceiptImageUrl(null);
     setMatchedItems([]);
   };
+
+  // Personal items for manual attach
+  const [personalItems, setPersonalItems] = useState<PersonalItem[]>([]);
+  const [searchingItemIdx, setSearchingItemIdx] = useState<number | null>(null);
+  const [itemSearchQuery, setItemSearchQuery] = useState('');
+
+  const loadPersonalItems = useCallback(async () => {
+    const items = await getUserPersonalItems(userId);
+    setPersonalItems(items);
+  }, [userId]);
+
+  useEffect(() => {
+    loadPersonalItems();
+  }, [loadPersonalItems]);
+
+  const filteredPersonalItems = itemSearchQuery.trim()
+    ? personalItems.filter(p =>
+        p.name.toLowerCase().includes(itemSearchQuery.toLowerCase())
+      )
+    : personalItems;
 
   const getMatchIndicator = (m: MatchedItem) => {
     if (m.confidence >= 90 && m.isConfirmed) {
@@ -529,6 +549,13 @@ export function ImportReceiptPanel({
                       {match && match.matchedCanonicalName && (
                         <div className="flex items-center justify-between gap-1 [dir=rtl]:flex-row-reverse">
                           <div className="flex items-center gap-1 [dir=rtl]:flex-row-reverse flex-1 min-w-0">
+                            {match.matchedImageUrl && (
+                              <img
+                                src={match.matchedImageUrl}
+                                alt=""
+                                className="h-5 w-5 rounded object-cover flex-shrink-0"
+                              />
+                            )}
                             {indicator?.icon && <indicator.icon className={`h-3 w-3 flex-shrink-0 ${indicator.color}`} />}
                             <span className={`text-[10px] font-medium ${indicator?.color}`}>
                               {indicator?.label}
@@ -559,6 +586,68 @@ export function ImportReceiptPanel({
                               <X className="h-3 w-3" />
                             </Button>
                           </div>
+                        </div>
+                      )}
+                      {/* Manual search for unmatched items */}
+                      {match && !match.matchedCanonicalName && match.confidence === 0 && (
+                        <div className="space-y-1">
+                          {searchingItemIdx === idx ? (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1 [dir=rtl]:flex-row-reverse">
+                                <Search className="h-3 w-3 text-slate-400 flex-shrink-0" />
+                                <Input
+                                  value={itemSearchQuery}
+                                  onChange={(e) => setItemSearchQuery(e.target.value)}
+                                  placeholder={t.searchMyItems}
+                                  className="text-xs h-6 text-right flex-1"
+                                  autoFocus
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => { setSearchingItemIdx(null); setItemSearchQuery(''); }}
+                                  className="h-5 w-5 p-0"
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                              {filteredPersonalItems.length > 0 ? (
+                                <div className="max-h-24 overflow-y-auto space-y-0.5 border rounded bg-white dark:bg-slate-900 p-1">
+                                  {filteredPersonalItems.slice(0, 10).map((pi, piIdx) => (
+                                    <button
+                                      key={piIdx}
+                                      type="button"
+                                      className="flex items-center gap-1.5 w-full text-right text-xs px-1.5 py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors [dir=rtl]:flex-row-reverse"
+                                      onClick={() => {
+                                        handleMatchAction(idx, 'change', pi.name, pi.image_url);
+                                        setSearchingItemIdx(null);
+                                        setItemSearchQuery('');
+                                      }}
+                                    >
+                                      {pi.image_url ? (
+                                        <img src={pi.image_url} alt="" className="h-5 w-5 rounded object-cover flex-shrink-0" />
+                                      ) : (
+                                        <ImageIcon className="h-4 w-4 text-slate-300 flex-shrink-0" />
+                                      )}
+                                      <span className="truncate">{pi.name}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-[10px] text-slate-400 text-center py-1">{t.noMatch}</p>
+                              )}
+                            </div>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { setSearchingItemIdx(idx); setItemSearchQuery(''); }}
+                              className="h-5 text-[10px] text-emerald-600 hover:text-emerald-700 px-1"
+                            >
+                              <Search className="h-3 w-3 me-0.5" />
+                              {t.attachItem}
+                            </Button>
+                          )}
                         </div>
                       )}
                       {/* Item fields row */}

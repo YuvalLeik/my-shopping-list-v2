@@ -1101,6 +1101,7 @@ export default function Home() {
             toast.error('נכשל בשכפול הקנייה', { description: err instanceof Error ? err.message : 'Unknown error' });
           }
         }}
+        onOpenSettings={() => setShowMatchSettings(true)}
       />
 
       {/* Main Content */}

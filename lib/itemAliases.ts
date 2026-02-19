@@ -13,6 +13,7 @@ export interface ItemAlias {
 export interface MatchedItem {
   originalName: string;
   matchedCanonicalName: string | null;
+  matchedImageUrl: string | null;
   confidence: number;
   isConfirmed: boolean;
   quantity: number;
@@ -20,17 +21,57 @@ export interface MatchedItem {
   totalPrice: number | null;
 }
 
+export interface PersonalItem {
+  name: string;
+  image_url: string | null;
+}
+
 function normalize(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 /**
- * Exact alias lookup (case-insensitive on alias_name)
+ * Get the user's own items from their grocery lists (the items they manually created).
+ * Deduplicated by normalized name, preferring items with images.
+ */
+export async function getUserPersonalItems(userId: string): Promise<PersonalItem[]> {
+  const { data: lists, error: listsErr } = await supabase
+    .from('grocery_lists')
+    .select('id')
+    .eq('local_user_id', userId);
+
+  if (listsErr || !lists?.length) return [];
+
+  const listIds = lists.map(l => l.id);
+  const { data: items, error: itemsErr } = await supabase
+    .from('grocery_items')
+    .select('name, image_url')
+    .in('list_id', listIds);
+
+  if (itemsErr || !items) return [];
+
+  const map = new Map<string, PersonalItem>();
+  for (const item of items) {
+    const norm = normalize(item.name);
+    const existing = map.get(norm);
+    if (!existing) {
+      map.set(norm, { name: item.name, image_url: item.image_url || null });
+    } else if (item.image_url && !existing.image_url) {
+      map.set(norm, { name: item.name, image_url: item.image_url });
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+/**
+ * Exact alias lookup (case-insensitive on alias_name).
+ * Also returns image_url by looking up the canonical name in user's personal items.
  */
 export async function findAlias(
   userId: string,
   aliasName: string
-): Promise<{ canonical_name: string; store_name: string | null; confirmed: boolean } | null> {
+): Promise<{ canonical_name: string; store_name: string | null; confirmed: boolean; image_url: string | null } | null> {
   const norm = normalize(aliasName);
   const { data, error } = await supabase
     .from('item_aliases')
@@ -41,38 +82,78 @@ export async function findAlias(
     .maybeSingle();
 
   if (error || !data) return null;
-  return data;
+
+  // Look up image from user's personal items for the canonical name
+  let imageUrl: string | null = null;
+  const { data: lists } = await supabase
+    .from('grocery_lists')
+    .select('id')
+    .eq('local_user_id', userId);
+  if (lists?.length) {
+    const { data: imgItem } = await supabase
+      .from('grocery_items')
+      .select('image_url')
+      .in('list_id', lists.map(l => l.id))
+      .ilike('name', normalize(data.canonical_name))
+      .not('image_url', 'is', null)
+      .limit(1)
+      .maybeSingle();
+    if (imgItem) imageUrl = imgItem.image_url;
+  }
+
+  return { ...data, image_url: imageUrl };
 }
 
 /**
- * Fuzzy match against the shopping_items catalog.
- * Uses substring containment and prefix matching for scoring.
+ * Fuzzy match against the user's personal items first (with image bonus),
+ * then fall back to global catalog.
  */
 export async function findAliasFuzzy(
   userId: string,
   receiptName: string
-): Promise<{ canonical_name: string; similarity: number }[]> {
+): Promise<{ canonical_name: string; similarity: number; image_url: string | null }[]> {
   const norm = normalize(receiptName);
   if (!norm || norm.length < 2) return [];
 
+  // 1. Search user's personal items first
+  const personalItems = await getUserPersonalItems(userId);
+  const seen = new Set<string>();
+  const results: { canonical_name: string; similarity: number; image_url: string | null }[] = [];
+
+  for (const item of personalItems) {
+    const itemNorm = normalize(item.name);
+    if (seen.has(itemNorm)) continue;
+    seen.add(itemNorm);
+
+    let sim = computeSimilarity(norm, itemNorm);
+    if (sim >= 0.3) {
+      if (item.image_url) sim = Math.min(sim + 0.1, 1.0);
+      results.push({ canonical_name: item.name, similarity: sim, image_url: item.image_url });
+    }
+  }
+
+  // 2. If personal items yielded good results, return them
+  results.sort((a, b) => b.similarity - a.similarity);
+  if (results.length > 0 && results[0].similarity >= 0.5) {
+    return results.slice(0, 5);
+  }
+
+  // 3. Fall back to global catalog with reduced scores
   const { data: catalogItems, error } = await supabase
     .from('shopping_items')
-    .select('name')
+    .select('name, image_url')
     .limit(500);
 
-  if (error || !catalogItems) return [];
+  if (!error && catalogItems) {
+    for (const item of catalogItems) {
+      const catalogNorm = normalize(item.name);
+      if (seen.has(catalogNorm)) continue;
+      seen.add(catalogNorm);
 
-  const seen = new Set<string>();
-  const results: { canonical_name: string; similarity: number }[] = [];
-
-  for (const item of catalogItems) {
-    const catalogNorm = normalize(item.name);
-    if (seen.has(catalogNorm)) continue;
-    seen.add(catalogNorm);
-
-    const sim = computeSimilarity(norm, catalogNorm);
-    if (sim >= 0.3) {
-      results.push({ canonical_name: item.name, similarity: sim });
+      const sim = computeSimilarity(norm, catalogNorm);
+      if (sim >= 0.3) {
+        results.push({ canonical_name: item.name, similarity: sim * 0.7, image_url: item.image_url || null });
+      }
     }
   }
 
@@ -83,7 +164,6 @@ export async function findAliasFuzzy(
 function computeSimilarity(receiptNorm: string, catalogNorm: string): number {
   if (receiptNorm === catalogNorm) return 1.0;
 
-  // One contains the other
   if (receiptNorm.includes(catalogNorm)) {
     return 0.6 + 0.3 * (catalogNorm.length / receiptNorm.length);
   }
@@ -91,7 +171,6 @@ function computeSimilarity(receiptNorm: string, catalogNorm: string): number {
     return 0.5 + 0.3 * (receiptNorm.length / catalogNorm.length);
   }
 
-  // Word overlap: split both into words and check overlap
   const rWords = receiptNorm.split(' ').filter(w => w.length > 1);
   const cWords = catalogNorm.split(' ').filter(w => w.length > 1);
   if (rWords.length === 0 || cWords.length === 0) return 0;
@@ -110,9 +189,6 @@ function computeSimilarity(receiptNorm: string, catalogNorm: string): number {
   return overlap * 0.8;
 }
 
-/**
- * Upsert an alias (insert or update on conflict)
- */
 export async function upsertAlias(
   userId: string,
   aliasName: string,
@@ -167,7 +243,8 @@ export async function deleteAlias(aliasId: string): Promise<void> {
 }
 
 /**
- * Main matching function: for each receipt item, find alias or fuzzy-suggest.
+ * Main matching function: for each receipt item, find alias or fuzzy-suggest
+ * against user's personal items (with images) first, then global catalog.
  */
 export async function matchReceiptItems(
   userId: string,
@@ -181,6 +258,7 @@ export async function matchReceiptItems(
       results.push({
         originalName: item.name,
         matchedCanonicalName: null,
+        matchedImageUrl: null,
         confidence: 0,
         isConfirmed: false,
         quantity: item.quantity,
@@ -196,6 +274,7 @@ export async function matchReceiptItems(
       results.push({
         originalName: item.name,
         matchedCanonicalName: alias.canonical_name,
+        matchedImageUrl: alias.image_url,
         confidence: alias.confirmed ? 100 : 90,
         isConfirmed: alias.confirmed,
         quantity: item.quantity,
@@ -205,12 +284,13 @@ export async function matchReceiptItems(
       continue;
     }
 
-    // 2. Fuzzy match against catalog
+    // 2. Fuzzy match (personal items first, then global catalog)
     const fuzzy = await findAliasFuzzy(userId, item.name);
-    if (fuzzy.length > 0 && fuzzy[0].similarity >= 0.5) {
+    if (fuzzy.length > 0 && fuzzy[0].similarity >= 0.4) {
       results.push({
         originalName: item.name,
         matchedCanonicalName: fuzzy[0].canonical_name,
+        matchedImageUrl: fuzzy[0].image_url,
         confidence: Math.round(fuzzy[0].similarity * 80),
         isConfirmed: false,
         quantity: item.quantity,
@@ -224,6 +304,7 @@ export async function matchReceiptItems(
     results.push({
       originalName: item.name,
       matchedCanonicalName: null,
+      matchedImageUrl: null,
       confidence: 0,
       isConfirmed: false,
       quantity: item.quantity,
