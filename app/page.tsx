@@ -35,6 +35,7 @@ import { ImportReceiptPanel } from '@/app/components/ImportReceiptPanel';
 // ItemMatchSettings is now a dedicated page at /settings
 import { t } from '@/lib/translations';
 import { fetchLocalUsers, LocalUser } from '@/lib/localUsers';
+import { resolveItemDisplayInfo } from '@/lib/itemAliases';
 
 const CATEGORIES = [
   'ללא קטגוריה',
@@ -109,6 +110,7 @@ export default function Home() {
   const [viewingStandalonePurchaseId, setViewingStandalonePurchaseId] = useState<string | null>(null);
   const [viewingStandalonePurchase, setViewingStandalonePurchase] = useState<PurchaseRecordWithItems | null>(null);
   const [completedListsForDropdown, setCompletedListsForDropdown] = useState<GroceryList[]>([]);
+  const [purchaseDisplayInfo, setPurchaseDisplayInfo] = useState<Map<string, { canonicalName: string; imageUrl: string | null }>>(new Map());
 
   // Load all item names for autocomplete from global catalog (shopping_items)
   // This is shared across all users for learning/suggestions
@@ -640,6 +642,30 @@ export default function Home() {
     setViewingStandalonePurchase(record);
   };
 
+  // Resolve display info (canonical name + image) for purchase items
+  useEffect(() => {
+    if (!activeUserId) return;
+    const allNames: string[] = [];
+    if (viewingStandalonePurchase) {
+      for (const item of viewingStandalonePurchase.items) {
+        if (item.name) allNames.push(item.name);
+      }
+    }
+    for (const rec of previousListPurchases) {
+      for (const item of rec.items) {
+        if (item.name) allNames.push(item.name);
+      }
+    }
+    if (allNames.length === 0) {
+      setPurchaseDisplayInfo(new Map());
+      return;
+    }
+    const unique = [...new Set(allNames)];
+    resolveItemDisplayInfo(activeUserId, unique)
+      .then(info => setPurchaseDisplayInfo(info))
+      .catch(() => setPurchaseDisplayInfo(new Map()));
+  }, [activeUserId, viewingStandalonePurchase, previousListPurchases]);
+
   const handleDeletePreviousList = async () => {
     if (!listToDelete || !activeUserId) {
       toast.error(t.failedToDeleteList, {
@@ -1005,25 +1031,38 @@ export default function Home() {
       </CardHeader>
       <CardContent>
         <ul className="space-y-3">
-          {viewingStandalonePurchase.items.map((item) => (
-            <li
-              key={item.id}
-              className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 [dir=rtl]:flex-row-reverse opacity-90"
-            >
-              <div className="w-16 h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                <ShoppingCart className="h-6 w-6 text-slate-400" />
-              </div>
-              <div className="flex-1 text-right min-w-0">
-                <div className="font-medium text-slate-700 dark:text-slate-200">{item.name}</div>
-                <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  {item.total_price != null ? `${Number(item.total_price).toFixed(2)} ₪` : ''}
+          {viewingStandalonePurchase.items.map((item) => {
+            const displayInfo = purchaseDisplayInfo.get(item.name);
+            const displayName = displayInfo?.canonicalName || item.name;
+            const displayImage = displayInfo?.imageUrl || null;
+            const isAlias = displayInfo && displayInfo.canonicalName !== item.name;
+            return (
+              <li
+                key={item.id}
+                className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 [dir=rtl]:flex-row-reverse opacity-90"
+              >
+                <div className="w-16 h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  {displayImage ? (
+                    <img src={displayImage} alt={displayName} className="w-full h-full object-cover" />
+                  ) : (
+                    <ShoppingCart className="h-6 w-6 text-slate-400" />
+                  )}
                 </div>
-              </div>
-              <span className="text-sm font-medium text-slate-500 dark:text-slate-400 w-8 text-center">
-                {item.quantity}
-              </span>
-            </li>
-          ))}
+                <div className="flex-1 text-right min-w-0">
+                  <div className="font-medium text-slate-700 dark:text-slate-200">{displayName}</div>
+                  {isAlias && (
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{t.settingsOriginalName} {item.name}</div>
+                  )}
+                  <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    {item.total_price != null ? `${Number(item.total_price).toFixed(2)} ₪` : ''}
+                  </div>
+                </div>
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400 w-8 text-center">
+                  {item.quantity}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       </CardContent>
     </Card>

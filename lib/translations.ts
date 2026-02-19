@@ -142,10 +142,13 @@ export const t = {
   settingsMyItems: 'הפריטים שלי',
   settingsBackToLists: 'חזור לרשימות קניות',
   settingsOptional: 'אופציונלי',
-  settingsQuickAttach: 'חיבור מהיר – שם מקבלה לפריט שלי',
-  settingsQuickAttachHelp: 'הקלד את שם הפריט כפי שמופיע בקבלה, ובחר את הפריט שלך להתאמה',
-  settingsReceiptItemName: 'שם פריט מהקבלה...',
   settingsAlias: 'התאמה',
+  settingsAttachReceiptName: '+ חבר שם מקבלה',
+  settingsTypeReceiptName: 'הקלד שם כפי שמופיע בקבלה...',
+  settingsUnmatchedItems: 'פריטים מקבלות ללא התאמה',
+  settingsNoUnmatched: 'כל הפריטים מהקבלות מותאמים',
+  settingsPickItem: 'בחר את הפריט שלך:',
+  settingsOriginalName: 'שם מקורי בקבלה:',
 
   // Dashboard spending / prices
   spending: 'הוצאות',

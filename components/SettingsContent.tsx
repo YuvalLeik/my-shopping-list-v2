@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Trash2, Plus, Loader2, Search, Link2, Image as ImageIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trash2, Plus, Loader2, Search, Link2, Image as ImageIcon, ChevronDown, ChevronUp, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { t } from '@/lib/translations';
-import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, ItemAlias, PersonalItem } from '@/lib/itemAliases';
+import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, getUnmatchedReceiptItems, ItemAlias, PersonalItem } from '@/lib/itemAliases';
 import { toast } from 'sonner';
 
 interface SettingsContentProps {
@@ -16,8 +16,10 @@ interface SettingsContentProps {
 export function SettingsContent({ userId }: SettingsContentProps) {
   const [aliases, setAliases] = useState<ItemAlias[]>([]);
   const [personalItems, setPersonalItems] = useState<PersonalItem[]>([]);
+  const [unmatchedReceipt, setUnmatchedReceipt] = useState<string[]>([]);
   const [loadingAliases, setLoadingAliases] = useState(true);
   const [loadingItems, setLoadingItems] = useState(true);
+  const [loadingUnmatched, setLoadingUnmatched] = useState(true);
   const [filter, setFilter] = useState('');
   const [itemFilter, setItemFilter] = useState('');
 
@@ -28,13 +30,17 @@ export function SettingsContent({ userId }: SettingsContentProps) {
   const [newStore, setNewStore] = useState('');
   const [adding, setAdding] = useState(false);
 
-  // Manual attach state
-  const [attachingItemName, setAttachingItemName] = useState<string | null>(null);
-  const [attachSearch, setAttachSearch] = useState('');
+  // Per-card inline attach: which item card is open for attaching
+  const [attachCardItem, setAttachCardItem] = useState<string | null>(null);
+  const [attachCardInput, setAttachCardInput] = useState('');
 
-  // Expanded sections
+  // Unmatched item attach: which unmatched item is being matched
+  const [matchingUnmatched, setMatchingUnmatched] = useState<string | null>(null);
+  const [unmatchedSearch, setUnmatchedSearch] = useState('');
+
   const [showItems, setShowItems] = useState(true);
   const [showAliases, setShowAliases] = useState(true);
+  const [showUnmatched, setShowUnmatched] = useState(true);
 
   const loadAliases = useCallback(async () => {
     setLoadingAliases(true);
@@ -60,16 +66,30 @@ export function SettingsContent({ userId }: SettingsContentProps) {
     }
   }, [userId]);
 
+  const loadUnmatched = useCallback(async () => {
+    setLoadingUnmatched(true);
+    try {
+      const items = await getUnmatchedReceiptItems(userId);
+      setUnmatchedReceipt(items);
+    } catch {
+      // non-critical
+    } finally {
+      setLoadingUnmatched(false);
+    }
+  }, [userId]);
+
   useEffect(() => {
     loadAliases();
     loadPersonalItems();
-  }, [loadAliases, loadPersonalItems]);
+    loadUnmatched();
+  }, [loadAliases, loadPersonalItems, loadUnmatched]);
 
   const handleDeleteAlias = async (id: string) => {
     try {
       await deleteAlias(id);
       setAliases(prev => prev.filter(a => a.id !== id));
       toast.success(t.itemDeleted);
+      loadUnmatched();
     } catch {
       toast.error(t.failedToDeleteItem);
     }
@@ -86,6 +106,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
       setNewStore('');
       setShowAddForm(false);
       await loadAliases();
+      loadUnmatched();
     } catch {
       toast.error(t.failedToAddItem);
     } finally {
@@ -93,14 +114,31 @@ export function SettingsContent({ userId }: SettingsContentProps) {
     }
   };
 
-  const handleAttachAlias = async (personalItemName: string) => {
-    if (!attachingItemName) return;
+  // Attach a receipt name to a personal item (per-card flow)
+  const handleCardAttach = async (personalItemName: string) => {
+    if (!attachCardInput.trim()) return;
     try {
-      await upsertAlias(userId, attachingItemName, personalItemName, null);
-      toast.success(`${attachingItemName} → ${personalItemName}`);
-      setAttachingItemName(null);
-      setAttachSearch('');
+      await upsertAlias(userId, attachCardInput.trim(), personalItemName, null);
+      toast.success(`${attachCardInput.trim()} → ${personalItemName}`);
+      setAttachCardItem(null);
+      setAttachCardInput('');
       await loadAliases();
+      loadUnmatched();
+    } catch {
+      toast.error(t.failedToAddItem);
+    }
+  };
+
+  // Attach an unmatched receipt item to a personal item
+  const handleUnmatchedAttach = async (personalItemName: string) => {
+    if (!matchingUnmatched) return;
+    try {
+      await upsertAlias(userId, matchingUnmatched, personalItemName, null);
+      toast.success(`${matchingUnmatched} → ${personalItemName}`);
+      setMatchingUnmatched(null);
+      setUnmatchedSearch('');
+      await loadAliases();
+      loadUnmatched();
     } catch {
       toast.error(t.failedToAddItem);
     }
@@ -130,12 +168,106 @@ export function SettingsContent({ userId }: SettingsContentProps) {
     return aliases.filter(a => a.canonical_name.toLowerCase() === norm);
   };
 
-  const filteredAttachItems = attachSearch.trim()
-    ? personalItems.filter(p => p.name.toLowerCase().includes(attachSearch.toLowerCase()))
+  const filteredUnmatchedPersonal = unmatchedSearch.trim()
+    ? personalItems.filter(p => p.name.toLowerCase().includes(unmatchedSearch.toLowerCase()))
     : personalItems;
 
   return (
     <div className="space-y-6">
+      {/* Unmatched Receipt Items Section */}
+      {unmatchedReceipt.length > 0 && (
+        <Card className="border-amber-200 dark:border-amber-800">
+          <CardHeader className="pb-3">
+            <button
+              onClick={() => setShowUnmatched(!showUnmatched)}
+              className="flex items-center justify-between w-full text-right"
+            >
+              <CardTitle className="text-lg text-amber-700 dark:text-amber-400">
+                {t.settingsUnmatchedItems} ({unmatchedReceipt.length})
+              </CardTitle>
+              {showUnmatched ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            </button>
+          </CardHeader>
+          {showUnmatched && (
+            <CardContent>
+              {loadingUnmatched ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-amber-600" />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {unmatchedReceipt.map((receiptName) => (
+                    <div
+                      key={receiptName}
+                      className="border border-amber-200 dark:border-amber-800 rounded-lg p-3 bg-amber-50/50 dark:bg-amber-900/10"
+                    >
+                      <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
+                        <span className="text-sm text-slate-700 dark:text-slate-300">{receiptName}</span>
+                        {matchingUnmatched === receiptName ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => { setMatchingUnmatched(null); setUnmatchedSearch(''); }}
+                            className="h-6 w-6 p-0"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { setMatchingUnmatched(receiptName); setUnmatchedSearch(''); }}
+                            className="h-7 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50"
+                          >
+                            {t.attachItem}
+                          </Button>
+                        )}
+                      </div>
+
+                      {matchingUnmatched === receiptName && (
+                        <div className="mt-2 space-y-1.5">
+                          <p className="text-[11px] text-slate-500">{t.settingsPickItem}</p>
+                          <Input
+                            value={unmatchedSearch}
+                            onChange={(e) => setUnmatchedSearch(e.target.value)}
+                            placeholder={t.searchMyItems}
+                            className="text-right text-sm h-8"
+                            dir="rtl"
+                            autoFocus
+                          />
+                          <div className="max-h-32 overflow-y-auto space-y-0.5 border rounded bg-white dark:bg-slate-900 p-1">
+                            {filteredUnmatchedPersonal.slice(0, 12).map((pi, piIdx) => (
+                              <button
+                                key={piIdx}
+                                type="button"
+                                className="flex items-center gap-2 w-full text-right text-sm px-2 py-1.5 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors [dir=rtl]:flex-row-reverse"
+                                onClick={() => handleUnmatchedAttach(pi.name)}
+                              >
+                                {pi.image_url ? (
+                                  <img src={pi.image_url} alt="" className="h-6 w-6 rounded object-cover flex-shrink-0" />
+                                ) : (
+                                  <div className="h-6 w-6 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+                                    <ImageIcon className="h-3 w-3 text-slate-300" />
+                                  </div>
+                                )}
+                                <span className="truncate">{pi.name}</span>
+                              </button>
+                            ))}
+                            {filteredUnmatchedPersonal.length === 0 && unmatchedSearch.trim() && (
+                              <p className="text-xs text-slate-400 text-center py-2">{t.noMatch}</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          )}
+        </Card>
+      )}
+
       {/* My Items Section */}
       <Card>
         <CardHeader className="pb-3">
@@ -170,6 +302,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {filteredItems.map((item, idx) => {
                   const itemAliases = aliasesForItem(item.name);
+                  const isAttaching = attachCardItem === item.name;
                   return (
                     <div
                       key={idx}
@@ -189,7 +322,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{item.name}</p>
-                          {itemAliases.length > 0 ? (
+                          {itemAliases.length > 0 && (
                             <div className="mt-0.5">
                               {itemAliases.map(a => (
                                 <div key={a.id} className="flex items-center gap-1 [dir=rtl]:flex-row-reverse">
@@ -209,11 +342,51 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                                 </div>
                               ))}
                             </div>
-                          ) : (
-                            <p className="text-[11px] text-slate-400 mt-0.5">{t.noAliases}</p>
                           )}
                         </div>
                       </div>
+
+                      {/* Per-card attach button / inline input */}
+                      {isAttaching ? (
+                        <div className="mt-2 flex gap-1.5 items-center [dir=rtl]:flex-row-reverse">
+                          <Input
+                            value={attachCardInput}
+                            onChange={(e) => setAttachCardInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleCardAttach(item.name); }}
+                            placeholder={t.settingsTypeReceiptName}
+                            className="flex-1 text-right text-xs h-7"
+                            dir="rtl"
+                            autoFocus
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCardAttach(item.name)}
+                            disabled={!attachCardInput.trim()}
+                            className="h-7 w-7 p-0 text-emerald-600"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => { setAttachCardItem(null); setAttachCardInput(''); }}
+                            className="h-7 w-7 p-0 text-slate-400"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => { setAttachCardItem(item.name); setAttachCardInput(''); }}
+                          className="mt-1.5 h-6 text-[11px] text-emerald-600 hover:text-emerald-700 px-1 w-full justify-start [dir=rtl]:justify-end"
+                        >
+                          <Plus className="h-3 w-3 me-0.5" />
+                          {t.settingsAttachReceiptName}
+                        </Button>
+                      )}
                     </div>
                   );
                 })}
@@ -305,57 +478,6 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                 </div>
               </div>
             )}
-
-            {/* Quick attach: search receipt name -> attach to personal item */}
-            <div className="space-y-2 p-3 border border-blue-200 dark:border-blue-800 rounded-lg bg-blue-50/50 dark:bg-blue-900/10">
-              <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">{t.settingsQuickAttach}</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">{t.settingsQuickAttachHelp}</p>
-              <Input
-                value={attachingItemName || ''}
-                onChange={(e) => {
-                  setAttachingItemName(e.target.value);
-                  setAttachSearch('');
-                }}
-                placeholder={t.settingsReceiptItemName}
-                className="text-right text-sm"
-                dir="rtl"
-              />
-              {attachingItemName && attachingItemName.trim().length > 0 && (
-                <div className="space-y-1">
-                  <Input
-                    value={attachSearch}
-                    onChange={(e) => setAttachSearch(e.target.value)}
-                    placeholder={t.searchMyItems}
-                    className="text-right text-sm"
-                    dir="rtl"
-                    autoFocus
-                  />
-                  {filteredAttachItems.length > 0 ? (
-                    <div className="max-h-40 overflow-y-auto space-y-1 border rounded-lg bg-white dark:bg-slate-900 p-2">
-                      {filteredAttachItems.slice(0, 15).map((pi, piIdx) => (
-                        <button
-                          key={piIdx}
-                          type="button"
-                          className="flex items-center gap-2 w-full text-right text-sm px-2 py-1.5 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors [dir=rtl]:flex-row-reverse"
-                          onClick={() => handleAttachAlias(pi.name)}
-                        >
-                          {pi.image_url ? (
-                            <img src={pi.image_url} alt="" className="h-7 w-7 rounded object-cover flex-shrink-0" />
-                          ) : (
-                            <div className="h-7 w-7 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
-                              <ImageIcon className="h-3.5 w-3.5 text-slate-300" />
-                            </div>
-                          )}
-                          <span className="truncate">{pi.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : attachSearch.trim() ? (
-                    <p className="text-xs text-slate-400 text-center py-2">{t.noMatch}</p>
-                  ) : null}
-                </div>
-              )}
-            </div>
 
             {/* Aliases list grouped by canonical name */}
             {loadingAliases ? (

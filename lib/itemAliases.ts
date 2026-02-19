@@ -243,6 +243,92 @@ export async function deleteAlias(aliasId: string): Promise<void> {
 }
 
 /**
+ * Bulk-resolve purchase item names to their canonical display info (name + image).
+ * Uses aliases and personal items to find the best display for each name.
+ */
+export async function resolveItemDisplayInfo(
+  userId: string,
+  itemNames: string[]
+): Promise<Map<string, { canonicalName: string; imageUrl: string | null }>> {
+  const result = new Map<string, { canonicalName: string; imageUrl: string | null }>();
+  if (!itemNames.length) return result;
+
+  const allAliases = await fetchAllAliases(userId);
+  const personalItems = await getUserPersonalItems(userId);
+
+  const personalMap = new Map<string, PersonalItem>();
+  for (const p of personalItems) {
+    personalMap.set(normalize(p.name), p);
+  }
+
+  for (const name of itemNames) {
+    const norm = normalize(name);
+
+    // 1. Check if this name is an alias -> use canonical name + image
+    const alias = allAliases.find(a => normalize(a.alias_name) === norm);
+    if (alias) {
+      const personal = personalMap.get(normalize(alias.canonical_name));
+      result.set(name, {
+        canonicalName: alias.canonical_name,
+        imageUrl: personal?.image_url || null,
+      });
+      continue;
+    }
+
+    // 2. Check if this name itself is a personal item -> use its image
+    const directMatch = personalMap.get(norm);
+    if (directMatch) {
+      result.set(name, {
+        canonicalName: directMatch.name,
+        imageUrl: directMatch.image_url,
+      });
+      continue;
+    }
+
+    // 3. No match
+  }
+
+  return result;
+}
+
+/**
+ * Get receipt item names from purchase_items that have no alias mapping to any personal item.
+ */
+export async function getUnmatchedReceiptItems(userId: string): Promise<string[]> {
+  const { data: records, error: recErr } = await supabase
+    .from('purchase_records')
+    .select('id')
+    .eq('local_user_id', userId);
+
+  if (recErr || !records?.length) return [];
+
+  const recordIds = records.map(r => r.id);
+  const { data: purchaseItems, error: piErr } = await supabase
+    .from('purchase_items')
+    .select('name')
+    .in('purchase_record_id', recordIds);
+
+  if (piErr || !purchaseItems) return [];
+
+  const allAliases = await fetchAllAliases(userId);
+  const personalItems = await getUserPersonalItems(userId);
+
+  const aliasSet = new Set(allAliases.map(a => normalize(a.alias_name)));
+  const personalSet = new Set(personalItems.map(p => normalize(p.name)));
+
+  const unmatchedSet = new Set<string>();
+  for (const pi of purchaseItems) {
+    if (!pi.name?.trim()) continue;
+    const norm = normalize(pi.name);
+    if (!aliasSet.has(norm) && !personalSet.has(norm)) {
+      unmatchedSet.add(pi.name.trim());
+    }
+  }
+
+  return Array.from(unmatchedSet).sort();
+}
+
+/**
  * Main matching function: for each receipt item, find alias or fuzzy-suggest
  * against user's personal items (with images) first, then global catalog.
  */
