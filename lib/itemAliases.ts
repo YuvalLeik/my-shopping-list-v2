@@ -83,13 +83,12 @@ export async function findAlias(
 
   if (error || !data) return null;
 
-  // Look up image from user's personal items for the canonical name
   let imageUrl: string | null = null;
-  const { data: lists } = await supabase
+  const { data: lists, error: listsErr2 } = await supabase
     .from('grocery_lists')
     .select('id')
     .eq('local_user_id', userId);
-  if (lists?.length) {
+  if (!listsErr2 && lists?.length) {
     const { data: imgItem } = await supabase
       .from('grocery_items')
       .select('image_url')
@@ -239,7 +238,8 @@ export async function fetchAllAliases(userId: string): Promise<ItemAlias[]> {
 }
 
 export async function deleteAlias(aliasId: string): Promise<void> {
-  await supabase.from('item_aliases').delete().eq('id', aliasId);
+  const { error } = await supabase.from('item_aliases').delete().eq('id', aliasId);
+  if (error) throw new Error(error.message);
 }
 
 /**
@@ -310,8 +310,14 @@ export async function getUnmatchedReceiptItems(userId: string): Promise<string[]
 
   if (piErr || !purchaseItems) return [];
 
-  const allAliases = await fetchAllAliases(userId);
-  const personalItems = await getUserPersonalItems(userId);
+  let allAliases: ItemAlias[] = [];
+  let personalItems: PersonalItem[] = [];
+  try {
+    allAliases = await fetchAllAliases(userId);
+    personalItems = await getUserPersonalItems(userId);
+  } catch {
+    return [];
+  }
 
   const aliasSet = new Set(allAliases.map(a => normalize(a.alias_name)));
   const personalSet = new Set(personalItems.map(p => normalize(p.name)));

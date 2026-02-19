@@ -137,7 +137,7 @@ export async function getStorePriceComparison(
   const storeMap = new Map<string, { sum: number; count: number; lastPrice: number }>();
   for (const row of data) {
     const store = row.store_name ?? 'Unknown';
-    const up = row.unit_price != null ? Number(row.unit_price) : Number(row.store_name ? 0 : 0);
+    const up = row.unit_price != null ? Number(row.unit_price) : 0;
     if (up <= 0) continue;
     const cur = storeMap.get(store);
     if (!cur) {

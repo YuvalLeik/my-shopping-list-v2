@@ -29,6 +29,10 @@ CREATE POLICY "Public update item_aliases" ON item_aliases FOR UPDATE TO public 
 DROP POLICY IF EXISTS "Public delete item_aliases" ON item_aliases;
 CREATE POLICY "Public delete item_aliases" ON item_aliases FOR DELETE TO public USING (true);
 
+GRANT ALL ON public.item_aliases TO anon;
+GRANT ALL ON public.item_aliases TO authenticated;
+GRANT ALL ON public.item_aliases TO service_role;
+
 -- Item prices: tracks per-item prices from receipts over time
 CREATE TABLE IF NOT EXISTS item_prices (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -62,3 +66,7 @@ CREATE POLICY "Public update item_prices" ON item_prices FOR UPDATE TO public US
 
 DROP POLICY IF EXISTS "Public delete item_prices" ON item_prices;
 CREATE POLICY "Public delete item_prices" ON item_prices FOR DELETE TO public USING (true);
+
+GRANT ALL ON public.item_prices TO anon;
+GRANT ALL ON public.item_prices TO authenticated;
+GRANT ALL ON public.item_prices TO service_role;
