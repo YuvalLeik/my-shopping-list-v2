@@ -1,8 +1,13 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Loader2, ShoppingCart, ListChecks, TrendingUp, Search, X } from 'lucide-react';
-import { getDashboardStats, DashboardStats, getAllPurchasedItemNames, getItemMonthlyTrend, MonthlyTrend } from '@/lib/analytics';
+import { Loader2, ShoppingCart, ListChecks, TrendingUp, Search, X, DollarSign } from 'lucide-react';
+import {
+  getDashboardStats, DashboardStats, getAllPurchasedItemNames, getItemMonthlyTrend, MonthlyTrend,
+  getTopItemsBySpending, SpendingItem, getMonthlySpendingStats, MonthlySpendingPoint,
+  getTotalSpending, getItemPriceHistory, PricePoint, getStorePriceComparison, StorePriceComparison,
+} from '@/lib/analytics';
+import { t } from '@/lib/translations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -129,6 +134,17 @@ export function Dashboard({ userId }: DashboardProps) {
   const [itemTrendLoading, setItemTrendLoading] = useState(false);
   const [showItemDropdown, setShowItemDropdown] = useState(false);
 
+  // Spending & price state
+  const [totalSpending, setTotalSpending] = useState(0);
+  const [topBySpending, setTopBySpending] = useState<SpendingItem[]>([]);
+  const [monthlySpending, setMonthlySpending] = useState<MonthlySpendingPoint[]>([]);
+  const [priceSelectedItem, setPriceSelectedItem] = useState<string | null>(null);
+  const [priceSearchQuery, setPriceSearchQuery] = useState('');
+  const [showPriceDropdown, setShowPriceDropdown] = useState(false);
+  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
+  const [storeComparison, setStoreComparison] = useState<StorePriceComparison[]>([]);
+  const [priceLoading, setPriceLoading] = useState(false);
+
   // Filter items based on search query
   const filteredItems = useMemo(() => {
     if (!itemSearchQuery.trim()) return allItemNames.slice(0, 10);
@@ -136,6 +152,13 @@ export function Dashboard({ userId }: DashboardProps) {
       .filter(name => name.toLowerCase().includes(itemSearchQuery.toLowerCase()))
       .slice(0, 10);
   }, [allItemNames, itemSearchQuery]);
+
+  const filteredPriceItems = useMemo(() => {
+    if (!priceSearchQuery.trim()) return allItemNames.slice(0, 10);
+    return allItemNames
+      .filter(name => name.toLowerCase().includes(priceSearchQuery.toLowerCase()))
+      .slice(0, 10);
+  }, [allItemNames, priceSearchQuery]);
 
   useEffect(() => {
     if (!userId) {
@@ -151,12 +174,18 @@ export function Dashboard({ userId }: DashboardProps) {
       }
       setLoading(true);
       try {
-        const [data, itemNames] = await Promise.all([
+        const [data, itemNames, spending, topSpend, monthSpend] = await Promise.all([
           getDashboardStats(currentUserId),
           getAllPurchasedItemNames(currentUserId),
+          getTotalSpending(currentUserId),
+          getTopItemsBySpending(currentUserId, 10),
+          getMonthlySpendingStats(currentUserId),
         ]);
         setStats(data);
         setAllItemNames(itemNames);
+        setTotalSpending(spending);
+        setTopBySpending(topSpend);
+        setMonthlySpending(monthSpend);
       } catch (error) {
         console.error('Failed to load dashboard stats:', error);
         setStats({
@@ -199,6 +228,33 @@ export function Dashboard({ userId }: DashboardProps) {
     loadItemTrend();
   }, [userId, selectedItem]);
 
+  // Load price history when a price item is selected
+  useEffect(() => {
+    if (!userId || !priceSelectedItem) {
+      setPriceHistory([]);
+      setStoreComparison([]);
+      return;
+    }
+    async function loadPriceData() {
+      setPriceLoading(true);
+      try {
+        const [history, stores] = await Promise.all([
+          getItemPriceHistory(userId!, priceSelectedItem!),
+          getStorePriceComparison(userId!, priceSelectedItem!),
+        ]);
+        setPriceHistory(history);
+        setStoreComparison(stores);
+      } catch (error) {
+        console.error('Failed to load price data:', error);
+        setPriceHistory([]);
+        setStoreComparison([]);
+      } finally {
+        setPriceLoading(false);
+      }
+    }
+    loadPriceData();
+  }, [userId, priceSelectedItem]);
+
   const handleSelectItem = (itemName: string) => {
     setSelectedItem(itemName);
     setItemSearchQuery(itemName);
@@ -209,6 +265,19 @@ export function Dashboard({ userId }: DashboardProps) {
     setSelectedItem(null);
     setItemSearchQuery('');
     setItemTrend([]);
+  };
+
+  const handleSelectPriceItem = (itemName: string) => {
+    setPriceSelectedItem(itemName);
+    setPriceSearchQuery(itemName);
+    setShowPriceDropdown(false);
+  };
+
+  const handleClearPriceItem = () => {
+    setPriceSelectedItem(null);
+    setPriceSearchQuery('');
+    setPriceHistory([]);
+    setStoreComparison([]);
   };
 
   if (!userId) {
@@ -710,6 +779,280 @@ export function Dashboard({ userId }: DashboardProps) {
                 </CardContent>
               </Card>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Spending & Prices Section */}
+      {(totalSpending > 0 || topBySpending.length > 0 || monthlySpending.length > 0) && (
+        <div className="space-y-6">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t.spendingAndPrices}</h2>
+
+          {/* Total Spending KPI */}
+          <Card className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-900/30 dark:to-amber-800/20 border-amber-200/50 dark:border-amber-700/50 shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mb-1">
+                    {t.totalSpending}
+                  </p>
+                  <p className="text-3xl font-bold text-amber-900 dark:text-amber-100">
+                    ₪{totalSpending.toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-3 bg-amber-500/10 dark:bg-amber-400/10 rounded-full">
+                  <DollarSign className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Top Items by Spending */}
+            {topBySpending.length > 0 && (
+              <Card className="shadow-sm hover:shadow-md transition-shadow lg:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    {t.topBySpending}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="h-[300px] sm:h-[350px] mt-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={topBySpending}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                        <XAxis
+                          dataKey="itemName"
+                          tick={{ fill: '#374151', fontSize: 11, fontWeight: 500 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          tickLine={{ stroke: '#cbd5e1' }}
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis
+                          tick={{ fill: '#64748b', fontSize: 12 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          tickLine={{ stroke: '#cbd5e1' }}
+                        />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar
+                          dataKey="totalSpent"
+                          fill={CHART_COLORS.accent}
+                          name="₪ סה״כ"
+                          radius={[4, 4, 0, 0]}
+                        >
+                          {topBySpending.map((_, index) => (
+                            <Cell key={`spend-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Monthly Spending Trend */}
+            {monthlySpending.length > 0 && (
+              <Card className="shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    {t.monthlySpending}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="h-[280px] sm:h-[320px] mt-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={monthlySpending}
+                        margin={{ top: 10, right: 20, left: 10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="month"
+                          tick={{ fill: '#64748b', fontSize: 12 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                        />
+                        <YAxis
+                          tick={{ fill: '#64748b', fontSize: 12 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                        />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Line
+                          type="monotone"
+                          dataKey="totalSpent"
+                          stroke={CHART_COLORS.accent}
+                          strokeWidth={3}
+                          name="₪ הוצאות"
+                          dot={{ fill: CHART_COLORS.accent, strokeWidth: 2, r: 5 }}
+                          activeDot={{ r: 7, fill: CHART_COLORS.accent }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Item Price Tracker */}
+            <Card className="shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    {t.priceHistory}
+                  </CardTitle>
+                  <div className="relative w-full sm:w-64">
+                    <div className="relative">
+                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <Input
+                        type="text"
+                        placeholder="חפש פריט..."
+                        value={priceSearchQuery}
+                        onChange={(e) => {
+                          setPriceSearchQuery(e.target.value);
+                          setShowPriceDropdown(true);
+                          if (!e.target.value) setPriceSelectedItem(null);
+                        }}
+                        onFocus={() => setShowPriceDropdown(true)}
+                        className="pr-10 pl-8 text-sm"
+                      />
+                      {priceSelectedItem && (
+                        <button
+                          onClick={handleClearPriceItem}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    {showPriceDropdown && filteredPriceItems.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredPriceItems.map((item, index) => (
+                          <button
+                            key={index}
+                            onClick={() => handleSelectPriceItem(item)}
+                            className={`w-full text-right px-4 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors ${
+                              priceSelectedItem === item ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            {item}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {showPriceDropdown && (
+                  <div className="fixed inset-0 z-40" onClick={() => setShowPriceDropdown(false)} />
+                )}
+
+                {!priceSelectedItem ? (
+                  <div className="h-[280px] sm:h-[320px] mt-4 flex items-center justify-center">
+                    <div className="text-center">
+                      <Search className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                      <p className="text-slate-500 dark:text-slate-400">{t.selectItemForPrices}</p>
+                    </div>
+                  </div>
+                ) : priceLoading ? (
+                  <div className="h-[280px] sm:h-[320px] mt-4 flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-amber-600 dark:text-amber-400" />
+                  </div>
+                ) : priceHistory.length === 0 ? (
+                  <div className="h-[280px] sm:h-[320px] mt-4 flex items-center justify-center">
+                    <p className="text-slate-500 dark:text-slate-400">
+                      אין נתוני מחירים עבור &quot;{priceSelectedItem}&quot;
+                    </p>
+                  </div>
+                ) : (
+                  <div className="h-[280px] sm:h-[320px] mt-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={priceHistory}
+                        margin={{ top: 5, right: 20, left: 10, bottom: 40 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="date"
+                          tickFormatter={(value) => {
+                            const parts = String(value).split('-');
+                            return parts.length === 3 ? `${parts[2]}/${parts[1]}` : value;
+                          }}
+                          tick={{ fill: '#64748b', fontSize: 11 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={40}
+                        />
+                        <YAxis
+                          tick={{ fill: '#64748b', fontSize: 12 }}
+                          axisLine={{ stroke: '#cbd5e1' }}
+                        />
+                        <Tooltip
+                          content={<CustomTooltip />}
+                          labelFormatter={(value) => {
+                            const parts = String(value).split('-');
+                            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : value;
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="unit_price"
+                          stroke={CHART_COLORS.accent}
+                          strokeWidth={3}
+                          name="₪ מחיר ליחידה"
+                          dot={{ fill: CHART_COLORS.accent, strokeWidth: 2, r: 5 }}
+                          activeDot={{ r: 7 }}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Store comparison below price history */}
+                {priceSelectedItem && storeComparison.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t.storeComparison}</h4>
+                    <div className="h-[200px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={storeComparison}
+                          margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                          <XAxis
+                            dataKey="storeName"
+                            tick={{ fill: '#64748b', fontSize: 11 }}
+                            axisLine={{ stroke: '#cbd5e1' }}
+                            angle={-30}
+                            textAnchor="end"
+                            height={40}
+                          />
+                          <YAxis
+                            tick={{ fill: '#64748b', fontSize: 12 }}
+                            axisLine={{ stroke: '#cbd5e1' }}
+                          />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Bar
+                            dataKey="avgPrice"
+                            fill={CHART_COLORS.info}
+                            name={`₪ ${t.avgPrice}`}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}

@@ -1,4 +1,7 @@
 import { supabase } from './supabase';
+import { getSpendingByMonth as getSpendingByMonthFromPrices, getAverageItemPrices, getItemPriceHistory, getStorePriceComparison, PricePoint, StorePriceComparison, MonthlySpending } from './itemPrices';
+
+export type { PricePoint, StorePriceComparison, MonthlySpending };
 
 export interface TopItem {
   name: string;
@@ -443,6 +446,139 @@ export async function getCompletionTimelineByDay(userId: string): Promise<Comple
     return [];
   }
 }
+
+// ---- Spending & Price Analytics (from item_prices table) ----
+
+export interface SpendingItem {
+  itemName: string;
+  totalSpent: number;
+  avgUnitPrice: number;
+  purchaseCount: number;
+}
+
+export interface SpendingTimelinePoint {
+  date: string;
+  totalSpent: number;
+}
+
+export interface MonthlySpendingPoint {
+  month: string;
+  totalSpent: number;
+  itemCount: number;
+}
+
+/**
+ * Top items by total money spent.
+ */
+export async function getTopItemsBySpending(userId: string, limit: number = 10): Promise<SpendingItem[]> {
+  const { data, error } = await supabase
+    .from('item_prices')
+    .select('item_name, price, unit_price')
+    .eq('local_user_id', userId);
+
+  if (error || !data) return [];
+
+  const map = new Map<string, { totalSpent: number; unitPriceSum: number; count: number }>();
+  for (const row of data) {
+    const name = row.item_name;
+    const cur = map.get(name) || { totalSpent: 0, unitPriceSum: 0, count: 0 };
+    cur.totalSpent += Number(row.price);
+    if (row.unit_price != null) cur.unitPriceSum += Number(row.unit_price);
+    cur.count += 1;
+    map.set(name, cur);
+  }
+
+  return Array.from(map.entries())
+    .map(([itemName, { totalSpent, unitPriceSum, count }]) => ({
+      itemName,
+      totalSpent: Math.round(totalSpent * 100) / 100,
+      avgUnitPrice: count > 0 ? Math.round((unitPriceSum / count) * 100) / 100 : 0,
+      purchaseCount: count,
+    }))
+    .sort((a, b) => b.totalSpent - a.totalSpent)
+    .slice(0, limit);
+}
+
+/**
+ * Daily spending timeline from item_prices.
+ */
+export async function getSpendingTimeline(userId: string): Promise<SpendingTimelinePoint[]> {
+  const { data, error } = await supabase
+    .from('item_prices')
+    .select('purchase_date, price')
+    .eq('local_user_id', userId)
+    .not('purchase_date', 'is', null)
+    .order('purchase_date', { ascending: true });
+
+  if (error || !data) return [];
+
+  const dateMap = new Map<string, number>();
+  for (const row of data) {
+    if (!row.purchase_date) continue;
+    const d = new Date(row.purchase_date);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    dateMap.set(key, (dateMap.get(key) || 0) + Number(row.price));
+  }
+
+  return Array.from(dateMap.entries())
+    .map(([date, totalSpent]) => ({ date, totalSpent: Math.round(totalSpent * 100) / 100 }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Monthly spending with item count.
+ */
+export async function getMonthlySpendingStats(userId: string): Promise<MonthlySpendingPoint[]> {
+  const { data, error } = await supabase
+    .from('item_prices')
+    .select('purchase_date, price')
+    .eq('local_user_id', userId)
+    .not('purchase_date', 'is', null);
+
+  if (error || !data) return [];
+
+  const monthNames = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+  const monthMap = new Map<string, { totalSpent: number; itemCount: number }>();
+
+  for (const row of data) {
+    if (!row.purchase_date) continue;
+    const d = new Date(row.purchase_date);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const cur = monthMap.get(key) || { totalSpent: 0, itemCount: 0 };
+    cur.totalSpent += Number(row.price);
+    cur.itemCount += 1;
+    monthMap.set(key, cur);
+  }
+
+  return Array.from(monthMap.entries())
+    .map(([key, { totalSpent, itemCount }]) => {
+      const [, m] = key.split('-');
+      return {
+        month: monthNames[parseInt(m) - 1] || key,
+        totalSpent: Math.round(totalSpent * 100) / 100,
+        itemCount,
+        _sort: key,
+      };
+    })
+    .sort((a, b) => a._sort.localeCompare(b._sort))
+    .map(({ month, totalSpent, itemCount }) => ({ month, totalSpent, itemCount }));
+}
+
+/**
+ * Total spending KPI.
+ */
+export async function getTotalSpending(userId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('item_prices')
+    .select('price')
+    .eq('local_user_id', userId);
+
+  if (error || !data) return 0;
+  return Math.round(data.reduce((sum, r) => sum + Number(r.price), 0) * 100) / 100;
+}
+
+// Re-export price library functions for dashboard use
+export { getAverageItemPrices, getItemPriceHistory, getStorePriceComparison, getSpendingByMonthFromPrices };
 
 /**
  * Get all dashboard stats at once. All data is per-user and from completed lists (and purchased items) only.
