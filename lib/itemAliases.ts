@@ -195,39 +195,36 @@ export async function upsertAlias(
   canonicalName: string,
   storeName?: string | null
 ): Promise<void> {
-  const norm = normalize(aliasName);
+  const trimmed = aliasName.trim();
+  if (!trimmed) throw new Error('Alias name cannot be empty');
 
-  const { data: existing, error: lookupErr } = await supabase
+  const { error: insertErr } = await supabase
     .from('item_aliases')
-    .select('id')
-    .eq('local_user_id', userId)
-    .ilike('alias_name', norm)
-    .limit(1)
-    .maybeSingle();
-  if (lookupErr) throw new Error(`Failed to lookup alias: ${lookupErr.message}`);
+    .insert({
+      local_user_id: userId,
+      canonical_name: canonicalName,
+      alias_name: trimmed,
+      store_name: storeName ?? null,
+      confirmed: true,
+    });
 
-  if (existing) {
-    const { error } = await supabase
+  if (!insertErr) return;
+
+  if (insertErr.code === '23505') {
+    const { error: updateErr } = await supabase
       .from('item_aliases')
       .update({
         canonical_name: canonicalName,
         store_name: storeName ?? null,
         confirmed: true,
       })
-      .eq('id', existing.id);
-    if (error) throw new Error(`Failed to update alias: ${error.message}`);
-  } else {
-    const { error } = await supabase
-      .from('item_aliases')
-      .insert({
-        local_user_id: userId,
-        canonical_name: canonicalName,
-        alias_name: aliasName.trim(),
-        store_name: storeName ?? null,
-        confirmed: true,
-      });
-    if (error) throw new Error(`Failed to insert alias: ${error.message}`);
+      .eq('local_user_id', userId)
+      .ilike('alias_name', trimmed);
+    if (updateErr) throw new Error(updateErr.message);
+    return;
   }
+
+  throw new Error(insertErr.message);
 }
 
 export async function fetchAllAliases(userId: string): Promise<ItemAlias[]> {

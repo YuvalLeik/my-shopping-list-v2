@@ -107,8 +107,8 @@ export function SettingsContent({ userId }: SettingsContentProps) {
       setShowAddForm(false);
       await loadAliases();
       loadUnmatched();
-    } catch {
-      toast.error(t.failedToAddItem);
+    } catch (err) {
+      toast.error(`${t.failedToAddItem}: ${err instanceof Error ? err.message : ''}`);
     } finally {
       setAdding(false);
     }
@@ -124,8 +124,8 @@ export function SettingsContent({ userId }: SettingsContentProps) {
       setAttachCardInput('');
       await loadAliases();
       loadUnmatched();
-    } catch {
-      toast.error(t.failedToAddItem);
+    } catch (err) {
+      toast.error(`${t.failedToAddItem}: ${err instanceof Error ? err.message : ''}`);
     }
   };
 
@@ -139,8 +139,8 @@ export function SettingsContent({ userId }: SettingsContentProps) {
       setUnmatchedSearch('');
       await loadAliases();
       loadUnmatched();
-    } catch {
-      toast.error(t.failedToAddItem);
+    } catch (err) {
+      toast.error(`${t.failedToAddItem}: ${err instanceof Error ? err.message : ''}`);
     }
   };
 
