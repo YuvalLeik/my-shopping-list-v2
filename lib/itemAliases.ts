@@ -197,16 +197,17 @@ export async function upsertAlias(
 ): Promise<void> {
   const norm = normalize(aliasName);
 
-  const { data: existing } = await supabase
+  const { data: existing, error: lookupErr } = await supabase
     .from('item_aliases')
     .select('id')
     .eq('local_user_id', userId)
     .ilike('alias_name', norm)
     .limit(1)
     .maybeSingle();
+  if (lookupErr) throw new Error(`Failed to lookup alias: ${lookupErr.message}`);
 
   if (existing) {
-    await supabase
+    const { error } = await supabase
       .from('item_aliases')
       .update({
         canonical_name: canonicalName,
@@ -214,8 +215,9 @@ export async function upsertAlias(
         confirmed: true,
       })
       .eq('id', existing.id);
+    if (error) throw new Error(`Failed to update alias: ${error.message}`);
   } else {
-    await supabase
+    const { error } = await supabase
       .from('item_aliases')
       .insert({
         local_user_id: userId,
@@ -224,6 +226,7 @@ export async function upsertAlias(
         store_name: storeName ?? null,
         confirmed: true,
       });
+    if (error) throw new Error(`Failed to insert alias: ${error.message}`);
   }
 }
 
