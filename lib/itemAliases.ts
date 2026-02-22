@@ -24,6 +24,8 @@ export interface MatchedItem {
 export interface PersonalItem {
   name: string;
   image_url: string | null;
+  source?: 'grocery' | 'catalog';
+  catalog_id?: string;
 }
 
 function normalize(name: string): string {
@@ -31,33 +33,55 @@ function normalize(name: string): string {
 }
 
 /**
- * Get the user's own items from their grocery lists (the items they manually created).
+ * Get the user's personal items from grocery lists AND manually-added catalog items.
  * Deduplicated by normalized name, preferring items with images.
  */
 export async function getUserPersonalItems(userId: string): Promise<PersonalItem[]> {
+  const map = new Map<string, PersonalItem>();
+
+  // Source 1: grocery list items
   const { data: lists, error: listsErr } = await supabase
     .from('grocery_lists')
     .select('id')
     .eq('local_user_id', userId);
 
-  if (listsErr || !lists?.length) return [];
+  if (!listsErr && lists?.length) {
+    const listIds = lists.map(l => l.id);
+    const { data: items, error: itemsErr } = await supabase
+      .from('grocery_items')
+      .select('name, image_url')
+      .in('list_id', listIds);
 
-  const listIds = lists.map(l => l.id);
-  const { data: items, error: itemsErr } = await supabase
-    .from('grocery_items')
-    .select('name, image_url')
-    .in('list_id', listIds);
+    if (!itemsErr && items) {
+      for (const item of items) {
+        const norm = normalize(item.name);
+        const existing = map.get(norm);
+        if (!existing) {
+          map.set(norm, { name: item.name, image_url: item.image_url || null, source: 'grocery' });
+        } else if (item.image_url && !existing.image_url) {
+          map.set(norm, { name: item.name, image_url: item.image_url, source: 'grocery' });
+        }
+      }
+    }
+  }
 
-  if (itemsErr || !items) return [];
+  // Source 2: manually-added catalog items
+  const { data: catalogItems, error: catalogErr } = await supabase
+    .from('user_catalog_items')
+    .select('id, name, image_url')
+    .eq('local_user_id', userId);
 
-  const map = new Map<string, PersonalItem>();
-  for (const item of items) {
-    const norm = normalize(item.name);
-    const existing = map.get(norm);
-    if (!existing) {
-      map.set(norm, { name: item.name, image_url: item.image_url || null });
-    } else if (item.image_url && !existing.image_url) {
-      map.set(norm, { name: item.name, image_url: item.image_url });
+  if (!catalogErr && catalogItems) {
+    for (const item of catalogItems) {
+      const norm = normalize(item.name);
+      const existing = map.get(norm);
+      if (!existing) {
+        map.set(norm, { name: item.name, image_url: item.image_url || null, source: 'catalog', catalog_id: item.id });
+      } else if (item.image_url && !existing.image_url) {
+        map.set(norm, { ...existing, image_url: item.image_url, source: 'catalog', catalog_id: item.id });
+      } else if (existing.source !== 'catalog') {
+        existing.catalog_id = item.id;
+      }
     }
   }
 
@@ -406,4 +430,47 @@ export async function matchReceiptItems(
   }
 
   return results;
+}
+
+export async function addUserCatalogItem(
+  userId: string,
+  name: string,
+  imageUrl?: string | null
+): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Item name cannot be empty');
+
+  const { error } = await supabase
+    .from('user_catalog_items')
+    .insert({
+      local_user_id: userId,
+      name: trimmed,
+      image_url: imageUrl ?? null,
+    });
+
+  if (error) {
+    if (error.code === '23505') throw new Error('DUPLICATE');
+    throw new Error(error.message);
+  }
+}
+
+export async function deleteUserCatalogItem(itemId: string): Promise<void> {
+  const { error } = await supabase
+    .from('user_catalog_items')
+    .delete()
+    .eq('id', itemId);
+  if (error) throw new Error(error.message);
+}
+
+export async function getUserCatalogItems(
+  userId: string
+): Promise<Array<{ id: string; name: string; image_url: string | null; created_at: string }>> {
+  const { data, error } = await supabase
+    .from('user_catalog_items')
+    .select('id, name, image_url, created_at')
+    .eq('local_user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error || !data) return [];
+  return data;
 }

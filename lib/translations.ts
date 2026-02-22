@@ -150,6 +150,13 @@ export const t = {
   settingsPickItem: 'בחר את הפריט שלך:',
   settingsOriginalName: 'שם מקורי בקבלה:',
 
+  // Manual item creation in Settings
+  addPersonalItem: 'הוסף פריט',
+  personalItemName: 'שם הפריט',
+  personalItemAdded: 'הפריט נוסף בהצלחה',
+  personalItemDeleted: 'הפריט הוסר',
+  personalItemDuplicate: 'פריט זה כבר קיים',
+
   // Dashboard spending / prices
   spending: 'הוצאות',
   totalSpending: 'סה״כ הוצאות',

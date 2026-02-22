@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { t } from '@/lib/translations';
-import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, getUnmatchedReceiptItems, ItemAlias, PersonalItem } from '@/lib/itemAliases';
+import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, getUnmatchedReceiptItems, addUserCatalogItem, deleteUserCatalogItem, ItemAlias, PersonalItem } from '@/lib/itemAliases';
 import { toast } from 'sonner';
 
 interface SettingsContentProps {
@@ -37,6 +37,11 @@ export function SettingsContent({ userId }: SettingsContentProps) {
   // Unmatched item attach: which unmatched item is being matched
   const [matchingUnmatched, setMatchingUnmatched] = useState<string | null>(null);
   const [unmatchedSearch, setUnmatchedSearch] = useState('');
+
+  // Add personal item form
+  const [showAddItemForm, setShowAddItemForm] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [addingItem, setAddingItem] = useState(false);
 
   const [showItems, setShowItems] = useState(true);
   const [showAliases, setShowAliases] = useState(true);
@@ -141,6 +146,36 @@ export function SettingsContent({ userId }: SettingsContentProps) {
       loadUnmatched();
     } catch (err) {
       toast.error(`${t.failedToAddItem}: ${err instanceof Error ? err.message : ''}`);
+    }
+  };
+
+  const handleAddPersonalItem = async () => {
+    if (!newItemName.trim()) return;
+    setAddingItem(true);
+    try {
+      await addUserCatalogItem(userId, newItemName.trim());
+      toast.success(t.personalItemAdded);
+      setNewItemName('');
+      setShowAddItemForm(false);
+      await loadPersonalItems();
+    } catch (err) {
+      if (err instanceof Error && err.message === 'DUPLICATE') {
+        toast.error(t.personalItemDuplicate);
+      } else {
+        toast.error(`${t.failedToAddItem}: ${err instanceof Error ? err.message : ''}`);
+      }
+    } finally {
+      setAddingItem(false);
+    }
+  };
+
+  const handleDeleteCatalogItem = async (catalogId: string) => {
+    try {
+      await deleteUserCatalogItem(catalogId);
+      toast.success(t.personalItemDeleted);
+      await loadPersonalItems();
+    } catch {
+      toast.error(t.failedToDeleteItem);
     }
   };
 
@@ -279,15 +314,60 @@ export function SettingsContent({ userId }: SettingsContentProps) {
             {showItems ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
           </button>
           {showItems && (
-            <div className="relative mt-2">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                value={itemFilter}
-                onChange={(e) => setItemFilter(e.target.value)}
-                placeholder={t.searchMyItems}
-                className="pr-10 text-right text-sm"
-              />
-            </div>
+            <>
+              <div className="flex items-center gap-2 mt-2 [dir=rtl]:flex-row-reverse">
+                <div className="relative flex-1">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    value={itemFilter}
+                    onChange={(e) => setItemFilter(e.target.value)}
+                    placeholder={t.searchMyItems}
+                    className="pr-10 text-right text-sm"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddItemForm(!showAddItemForm)}
+                  className="text-xs flex-shrink-0"
+                >
+                  <Plus className="h-3 w-3 me-1" />
+                  {t.addPersonalItem}
+                </Button>
+              </div>
+              {showAddItemForm && (
+                <div className="space-y-2 p-3 mt-2 border border-emerald-200 dark:border-emerald-800 rounded-lg bg-emerald-50/50 dark:bg-emerald-900/10">
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-2">{t.addPersonalItem}</p>
+                  <Input
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddPersonalItem(); }}
+                    placeholder={t.personalItemName}
+                    className="text-right text-sm"
+                    dir="rtl"
+                    autoFocus
+                  />
+                  <div className="flex gap-2 [dir=rtl]:flex-row-reverse">
+                    <Button
+                      onClick={handleAddPersonalItem}
+                      disabled={addingItem || !newItemName.trim()}
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                    >
+                      {addingItem ? <Loader2 className="h-3 w-3 animate-spin" /> : t.add}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setShowAddItemForm(false); setNewItemName(''); }}
+                      className="text-xs"
+                    >
+                      {t.cancel}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardHeader>
         {showItems && (
@@ -344,6 +424,17 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                             </div>
                           )}
                         </div>
+                        {item.catalog_id && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteCatalogItem(item.catalog_id!)}
+                            className="h-7 w-7 p-0 text-red-400 hover:text-red-600 flex-shrink-0"
+                            title={t.delete}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
 
                       {/* Per-card attach button / inline input */}
