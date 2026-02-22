@@ -357,13 +357,13 @@ export function ImportReceiptPanel({
   };
 
   return (
-    <Card className="fixed bottom-24 left-6 w-[420px] max-h-[80vh] shadow-2xl border-slate-200 bg-white dark:bg-slate-900 z-[60] [dir=rtl]:left-auto [dir=rtl]:right-6 flex flex-col overflow-hidden">
+    <Card className="fixed left-3 right-3 sm:left-6 sm:right-auto sm:w-[420px] max-w-[calc(100vw-1.5rem)] max-h-[80vh] shadow-2xl border-slate-200 bg-white dark:bg-slate-900 z-[60] [dir=rtl]:left-auto [dir=rtl]:right-3 sm:[dir=rtl]:right-6 [dir=rtl]:sm:left-auto flex flex-col overflow-hidden" style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}>
       <CardHeader className="pb-2 flex-shrink-0">
         <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
-          <CardTitle className="text-lg text-slate-900 dark:text-slate-50">
+          <CardTitle className="text-base sm:text-lg text-slate-900 dark:text-slate-50">
             {t.importReceipt}
           </CardTitle>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-6 w-6 p-0">
+          <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
             <X className="h-4 w-4" />
           </Button>
         </div>

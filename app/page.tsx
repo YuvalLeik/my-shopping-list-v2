@@ -1151,23 +1151,22 @@ export default function Home() {
             variant="outline"
             size="sm"
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="absolute top-4 right-4 md:hidden z-[100] flex-shrink-0 rounded-lg border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg hover:bg-slate-50 dark:hover:bg-slate-700 p-2 [dir=rtl]:right-auto [dir=rtl]:left-4"
+            className="absolute top-3 right-3 md:hidden z-[100] flex-shrink-0 rounded-lg border-2 border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg hover:bg-slate-50 dark:hover:bg-slate-700 p-2 [dir=rtl]:right-auto [dir=rtl]:left-3"
             title="רשימות קודמות"
           >
             <Menu className="h-6 w-6 text-slate-700 dark:text-slate-200" />
           </Button>
           
-          <div className="container mx-auto px-6 py-4">
-            <div className="flex items-center justify-between gap-4">
+          <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4">
+            <div className="flex items-center justify-between gap-2 sm:gap-4">
               {/* Right side - Title */}
-              <div className="flex-1">
-                {/* Title - עם padding מימין במובייל כדי לא להסתיר את הכפתור */}
-                <div className="text-right pr-12 md:pr-0">
-                  <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-50">
+              <div className="flex-1 min-w-0">
+                <div className="text-right pr-10 md:pr-0">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900 dark:text-slate-50">
                     רשימות קניות
                   </h1>
                   {activeUserName && (
-                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5 sm:mt-1">
                       משתמש: {activeUserName}
                     </p>
                   )}
@@ -1175,14 +1174,14 @@ export default function Home() {
               </div>
               
               {/* Left side - User Selector (visible on all screen sizes) */}
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                 <div className="flex flex-shrink-0 items-center">
                 {loadingUsers ? (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+                  <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
                     <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
                   </div>
                 ) : users.length === 0 ? (
-                  <div className="px-3 py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm text-sm text-slate-600 dark:text-slate-400">
+                  <div className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm text-xs sm:text-sm text-slate-600 dark:text-slate-400">
                     אין משתמשים
                   </div>
                 ) : users.length > 0 ? (
@@ -1193,13 +1192,13 @@ export default function Home() {
                       localStorage.setItem('active_user_id', userId);
                     }}
                   >
-                    <SelectTrigger className="flex items-center gap-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors [dir=rtl]:flex-row-reverse w-auto min-w-[120px] md:min-w-[160px]">
+                    <SelectTrigger className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 sm:px-3 py-1.5 sm:py-2 text-sm shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors [dir=rtl]:flex-row-reverse w-auto min-w-[100px] sm:min-w-[120px] md:min-w-[160px]">
                       <User className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                       <div className="flex flex-col items-start [dir=rtl]:items-end min-w-0">
-                        <span className="text-xs text-slate-500 dark:text-slate-400 leading-none">משתמש</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 leading-none hidden sm:block">משתמש</span>
                         <SelectValue className="text-sm font-medium text-slate-900 dark:text-slate-50 leading-tight" />
                       </div>
-                      <ChevronDown className="h-4 w-4 text-slate-500 dark:text-slate-400 flex-shrink-0 [dir=rtl]:mr-auto [dir=ltr]:ml-auto" />
+                      <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4 text-slate-500 dark:text-slate-400 flex-shrink-0 [dir=rtl]:mr-auto [dir=ltr]:ml-auto" />
                     </SelectTrigger>
                     <SelectContent position="popper" className="z-[200] min-w-[200px]" sideOffset={4}>
                       {users.map((user) => (
@@ -1226,7 +1225,7 @@ export default function Home() {
           </div>
         </div>
 
-        <main className={`relative z-0 container mx-auto px-6 py-8 max-w-5xl`}>
+        <main className={`relative z-0 container mx-auto px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 max-w-5xl`}>
 
           <div className={`grid gap-6 grid-cols-1 ${(viewingPreviousListId || viewingStandalonePurchaseId) ? 'md:grid-cols-2' : ''}`}>
             {/* Active List - Always shown */}
@@ -1240,10 +1239,10 @@ export default function Home() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <form onSubmit={handleAddItem} className="space-y-4">
+                    <form onSubmit={handleAddItem} className="space-y-3 sm:space-y-4">
                       {/* Item Name with Autocomplete */}
                       <div className="relative">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block text-right">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 sm:mb-2 block text-right">
                           {t.itemName}
                         </label>
                         <Input
@@ -1282,7 +1281,7 @@ export default function Home() {
 
                       {/* Category */}
                       <div>
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block text-right">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 sm:mb-2 block text-right">
                           קטגוריה
                         </label>
                         <Select 
@@ -1305,7 +1304,7 @@ export default function Home() {
 
                       {/* Image */}
                       <div>
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block text-right">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 sm:mb-2 block text-right">
                           תמונה (אופציונלי)
                         </label>
                         <div className="space-y-2">
@@ -1407,13 +1406,13 @@ export default function Home() {
                 {/* My List */}
                 <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
                   <CardHeader>
-                    <div className="flex items-center justify-between gap-4 [dir=rtl]:flex-row-reverse mb-4">
-                      <div className="flex-1 flex items-center gap-2 [dir=rtl]:flex-row-reverse">
-                        <CardTitle className="text-lg text-slate-900 dark:text-slate-50 text-right">
+                    <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4 [dir=rtl]:flex-row-reverse mb-3 sm:mb-4">
+                      <div className="flex-1 flex items-center gap-2 [dir=rtl]:flex-row-reverse min-w-0">
+                        <CardTitle className="text-base sm:text-lg text-slate-900 dark:text-slate-50 text-right flex-shrink-0">
                           {t.myList}
                         </CardTitle>
                         {editingListTitle ? (
-                          <div className="flex items-center gap-2 flex-1 [dir=rtl]:flex-row-reverse">
+                          <div className="flex items-center gap-2 flex-1 [dir=rtl]:flex-row-reverse min-w-0">
                             <Input
                               value={listTitle}
                               onChange={(e) => setListTitle(e.target.value)}
@@ -1439,7 +1438,7 @@ export default function Home() {
                           </div>
                         ) : (
                           <div 
-                            className="flex-1 text-right text-slate-600 dark:text-slate-400 cursor-pointer hover:text-slate-900 dark:hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                            className="flex-1 text-right text-slate-600 dark:text-slate-400 cursor-pointer hover:text-slate-900 dark:hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 truncate min-w-0"
                             onClick={() => setEditingListTitle(true)}
                             title="לחץ לעריכת שם הרשימה"
                           >
@@ -1447,39 +1446,44 @@ export default function Home() {
                           </div>
                         )}
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (activeUserId) {
-                            fetchGroceryListsWithItemCount(activeUserId, true)
-                              .then(all => setCompletedListsForDropdown(all.filter(l => l.completed_at)))
-                              .catch(() => setCompletedListsForDropdown([]));
-                          }
-                          setShowImportReceipt(true);
-                        }}
-                        className="text-emerald-600 hover:text-emerald-700"
-                      >
-                        <Receipt className="h-4 w-4 me-1" />
-                        {t.importReceipt}
-                      </Button>
-                      <Button
-                        onClick={() => { setCompleteListTotalCost(''); setShowCompleteDialog(true); }}
-                        className="bg-green-600 hover:bg-green-700 text-white [dir=rtl]:flex-row-reverse"
-                        disabled={completingListId !== null}
-                      >
-                        {completingListId ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin me-2" />
-                            {t.markListCompleted}
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="h-4 w-4 me-2" />
-                            {t.markListCompleted}
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 [dir=rtl]:flex-row-reverse">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (activeUserId) {
+                              fetchGroceryListsWithItemCount(activeUserId, true)
+                                .then(all => setCompletedListsForDropdown(all.filter(l => l.completed_at)))
+                                .catch(() => setCompletedListsForDropdown([]));
+                            }
+                            setShowImportReceipt(true);
+                          }}
+                          className="text-emerald-600 hover:text-emerald-700"
+                          title={t.importReceipt}
+                        >
+                          <Receipt className="h-4 w-4 sm:me-1" />
+                          <span className="hidden sm:inline">{t.importReceipt}</span>
+                        </Button>
+                        <Button
+                          onClick={() => { setCompleteListTotalCost(''); setShowCompleteDialog(true); }}
+                          className="bg-green-600 hover:bg-green-700 text-white [dir=rtl]:flex-row-reverse"
+                          size="sm"
+                          disabled={completingListId !== null}
+                          title={t.markListCompleted}
+                        >
+                          {completingListId ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin sm:me-1" />
+                              <span className="hidden sm:inline">{t.markListCompleted}</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="h-4 w-4 sm:me-1" />
+                              <span className="hidden sm:inline">{t.markListCompleted}</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -1569,20 +1573,20 @@ export default function Home() {
                       const groupedPurchased = groupByCategory(purchasedItems);
                       
                       return (
-                        <div className="space-y-6">
+                        <div className="space-y-4 sm:space-y-6">
                           {/* Header */}
-                          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-6 shadow-sm [dir=rtl]:text-right">
-                            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+                          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 sm:p-6 shadow-sm [dir=rtl]:text-right">
+                            <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100 mb-1 sm:mb-2">
                               🛒 רשימת הקניות שלי
                             </h1>
-                            <div className="text-sm text-slate-600 dark:text-slate-400">
+                            <div className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
                               {notPurchasedItems.length} פריטים חסרים · {purchasedItems.length} נאספו
                             </div>
                           </div>
                           
                           {/* Search and Sort Controls - Action Bar */}
-                          <div className="sticky top-0 z-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 shadow-sm [dir=rtl]:text-right">
-                            <div className="flex flex-col sm:flex-row gap-3 [dir=rtl]:flex-row-reverse">
+                          <div className="sticky top-0 z-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 sm:p-4 shadow-sm [dir=rtl]:text-right">
+                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 [dir=rtl]:flex-row-reverse">
                               <Input
                                 type="text"
                                 placeholder="חפש פריט..."
@@ -1696,11 +1700,11 @@ export default function Home() {
                                     <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-3 text-right">
                                       {category} ({categoryItems.length})
                                     </h3>
-                                    <ul className="space-y-3">
+                                    <ul className="space-y-2 sm:space-y-3">
                                       {categoryItems.map((item) => (
                                   <li
                                     key={item.id}
-                                    className="flex flex-wrap items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
+                                    className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
                                   >
                                     {selectionModeActive && (
                                       <input
@@ -1712,7 +1716,6 @@ export default function Home() {
                                         aria-label={t.selectAll}
                                       />
                                     )}
-                                    {/* Purchased checkbox */}
                                     <input
                                       type="checkbox"
                                       checked={item.purchased || false}
@@ -1721,8 +1724,7 @@ export default function Home() {
                                       className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
                                     />
                                     
-                                    {/* Image placeholder */}
-                                    <div className="relative w-16 h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden group">
+                                    <div className="relative w-10 h-10 sm:w-16 sm:h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden group">
                                       {item.image_url ? (
                                         <img 
                                           src={item.image_url} 
@@ -1730,7 +1732,7 @@ export default function Home() {
                                           className="w-full h-full object-cover"
                                         />
                                       ) : (
-                                        <ShoppingCart className="h-6 w-6 text-slate-400" />
+                                        <ShoppingCart className="h-4 w-4 sm:h-6 sm:w-6 text-slate-400" />
                                       )}
                                       <input
                                         type="file"
@@ -1740,7 +1742,6 @@ export default function Home() {
                                           if (file) {
                                             handleUpdateItemImage(item.id, file);
                                           }
-                                          // Reset input
                                           e.target.value = '';
                                         }}
                                         disabled={uploadingImageForItem === item.id}
@@ -1753,36 +1754,34 @@ export default function Home() {
                                         title="עדכן תמונה"
                                       >
                                         {uploadingImageForItem === item.id ? (
-                                          <Loader2 className="h-5 w-5 text-white animate-spin" />
+                                          <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 text-white animate-spin" />
                                         ) : (
-                                          <Camera className="h-5 w-5 text-white" />
+                                          <Camera className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                                         )}
                                       </label>
                                     </div>
                                     
-                                    {/* Item name - takes remaining space, wraps below on mobile if needed */}
                                     <div className="flex-1 min-w-0 text-right overflow-hidden">
-                                      <div className="font-medium text-slate-700 dark:text-slate-200 truncate">
+                                      <div className="font-medium text-sm sm:text-base text-slate-700 dark:text-slate-200 truncate">
                                         {item.name}
                                       </div>
-                                      <div className="text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">
+                                      <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                                         {item.category || 'ללא קטגוריה'}
                                       </div>
                                     </div>
                                     
-                                    {/* Quantity controls + Delete - own row on mobile to avoid overlap */}
-                                    <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-end [dir=rtl]:justify-start">
-                                      <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 [dir=rtl]:flex-row-reverse">
+                                      <div className="flex items-center gap-1 sm:gap-2">
                                         <Button
                                           variant="outline"
                                           size="sm"
                                           onClick={() => handleQuantityChange(item, -1)}
                                           disabled={item.quantity <= 1 || updatingItemId === item.id}
-                                          className="h-8 w-8 p-0"
+                                          className="h-7 w-7 sm:h-8 sm:w-8 p-0"
                                         >
-                                          <Minus className="h-4 w-4" />
+                                          <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
                                         </Button>
-                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200 w-8 text-center">
+                                        <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 w-6 sm:w-8 text-center">
                                           {item.quantity}
                                         </span>
                                         <Button
@@ -1790,9 +1789,9 @@ export default function Home() {
                                           size="sm"
                                           onClick={() => handleQuantityChange(item, 1)}
                                           disabled={updatingItemId === item.id}
-                                          className="h-8 w-8 p-0"
+                                          className="h-7 w-7 sm:h-8 sm:w-8 p-0"
                                         >
-                                          <Plus className="h-4 w-4" />
+                                          <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                                         </Button>
                                       </div>
                                       <Button
@@ -1800,12 +1799,15 @@ export default function Home() {
                                         size="sm"
                                         onClick={() => handleDeleteItem(item.id)}
                                         disabled={deletingItemId === item.id || bulkDeleting}
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0 h-7 w-7 sm:h-8 sm:w-auto p-0 sm:px-2"
                                       >
                                         {deletingItemId === item.id ? (
                                           <Loader2 className="h-4 w-4 animate-spin" />
                                         ) : (
-                                          t.delete
+                                          <>
+                                            <Trash2 className="h-4 w-4 sm:hidden" />
+                                            <span className="hidden sm:inline">{t.delete}</span>
+                                          </>
                                         )}
                                       </Button>
                                     </div>
@@ -1816,11 +1818,11 @@ export default function Home() {
                                 ))
                               ) : (
                                 // Alphabetical list
-                                <ul className="space-y-3">
+                                <ul className="space-y-2 sm:space-y-3">
                                   {groupedNotPurchased['כל הפריטים']?.map((item) => (
                                     <li
                                       key={item.id}
-                                      className="flex flex-wrap items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
+                                      className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors [dir=rtl]:flex-row-reverse"
                                     >
                                       {selectionModeActive && (
                                         <input
@@ -1832,7 +1834,6 @@ export default function Home() {
                                           aria-label={t.selectAll}
                                         />
                                       )}
-                                      {/* Purchased checkbox */}
                                       <input
                                         type="checkbox"
                                         checked={item.purchased || false}
@@ -1841,8 +1842,7 @@ export default function Home() {
                                         className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
                                       />
                                       
-                                      {/* Image placeholder */}
-                                      <div className="relative w-16 h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden group">
+                                      <div className="relative w-10 h-10 sm:w-16 sm:h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden group">
                                         {item.image_url ? (
                                           <img
                                             src={item.image_url}
@@ -1850,7 +1850,7 @@ export default function Home() {
                                             className="w-full h-full object-cover"
                                           />
                                         ) : (
-                                          <ShoppingCart className="h-6 w-6 text-slate-400" />
+                                          <ShoppingCart className="h-4 w-4 sm:h-6 sm:w-6 text-slate-400" />
                                         )}
                                         <input
                                           type="file"
@@ -1872,36 +1872,34 @@ export default function Home() {
                                           title="עדכן תמונה"
                                         >
                                           {uploadingImageForItem === item.id ? (
-                                            <Loader2 className="h-5 w-5 text-white animate-spin" />
+                                            <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 text-white animate-spin" />
                                           ) : (
-                                            <Camera className="h-5 w-5 text-white" />
+                                            <Camera className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                                           )}
                                         </label>
                                       </div>
                                       
-                                      {/* Item name - takes remaining space */}
                                       <div className="flex-1 min-w-0 text-right overflow-hidden">
-                                        <div className="font-medium text-slate-700 dark:text-slate-200 truncate">
+                                        <div className="font-medium text-sm sm:text-base text-slate-700 dark:text-slate-200 truncate">
                                           {item.name}
                                         </div>
-                                        <div className="text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">
+                                        <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                                           {item.category || 'ללא קטגוריה'}
                                         </div>
                                       </div>
                                       
-                                      {/* Quantity controls + Delete - own row on mobile to avoid overlap */}
-                                      <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-end [dir=rtl]:justify-start">
-                                        <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 [dir=rtl]:flex-row-reverse">
+                                        <div className="flex items-center gap-1 sm:gap-2">
                                           <Button
                                             variant="outline"
                                             size="sm"
                                             onClick={() => handleQuantityChange(item, -1)}
                                             disabled={item.quantity <= 1 || updatingItemId === item.id}
-                                            className="h-8 w-8 p-0"
+                                            className="h-7 w-7 sm:h-8 sm:w-8 p-0"
                                           >
-                                            <Minus className="h-4 w-4" />
+                                            <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
                                           </Button>
-                                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200 w-8 text-center">
+                                          <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200 w-6 sm:w-8 text-center">
                                             {item.quantity}
                                           </span>
                                           <Button
@@ -1909,9 +1907,9 @@ export default function Home() {
                                             size="sm"
                                             onClick={() => handleQuantityChange(item, 1)}
                                             disabled={updatingItemId === item.id}
-                                            className="h-8 w-8 p-0"
+                                            className="h-7 w-7 sm:h-8 sm:w-8 p-0"
                                           >
-                                            <Plus className="h-4 w-4" />
+                                            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                                           </Button>
                                         </div>
                                         <Button
@@ -1919,12 +1917,15 @@ export default function Home() {
                                           size="sm"
                                           onClick={() => handleDeleteItem(item.id)}
                                           disabled={deletingItemId === item.id || bulkDeleting}
-                                          className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
+                                          className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0 h-7 w-7 sm:h-8 sm:w-auto p-0 sm:px-2"
                                         >
                                           {deletingItemId === item.id ? (
                                             <Loader2 className="h-4 w-4 animate-spin" />
                                           ) : (
-                                            t.delete
+                                            <>
+                                              <Trash2 className="h-4 w-4 sm:hidden" />
+                                              <span className="hidden sm:inline">{t.delete}</span>
+                                            </>
                                           )}
                                         </Button>
                                       </div>
@@ -1963,11 +1964,11 @@ export default function Home() {
                                     <h4 className="text-xs font-medium text-slate-500 dark:text-slate-500 mb-2 text-right">
                                       {category} ({categoryItems.length})
                                     </h4>
-                                    <ul className="space-y-3">
+                                    <ul className="space-y-2 sm:space-y-3">
                                       {categoryItems.map((item) => (
                                         <li
                                           key={item.id}
-                                          className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-75 [dir=rtl]:flex-row-reverse"
+                                          className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-75 [dir=rtl]:flex-row-reverse"
                                         >
                                           {selectionModeActive && (
                                             <input
@@ -1979,7 +1980,6 @@ export default function Home() {
                                               aria-label={t.selectAll}
                                             />
                                           )}
-                                          {/* Checkbox - can be unchecked to return item to active list */}
                                           <input
                                             type="checkbox"
                                             checked={item.purchased || false}
@@ -1988,8 +1988,7 @@ export default function Home() {
                                             className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                                           />
 
-                                          {/* Image placeholder */}
-                                          <div className="w-16 h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                          <div className="w-10 h-10 sm:w-16 sm:h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
                                             {item.image_url ? (
                                               <img
                                                 src={item.image_url}
@@ -1997,23 +1996,21 @@ export default function Home() {
                                                 className="w-full h-full object-cover"
                                               />
                                             ) : (
-                                              <ShoppingCart className="h-6 w-6 text-slate-400" />
+                                              <ShoppingCart className="h-4 w-4 sm:h-6 sm:w-6 text-slate-400" />
                                             )}
                                           </div>
                                           
-                                          {/* Item name */}
                                           <div className="flex-1 text-right min-w-0">
-                                            <div className="font-medium text-slate-700 dark:text-slate-200 line-through">
+                                            <div className="font-medium text-sm sm:text-base text-slate-700 dark:text-slate-200 line-through truncate">
                                               {item.name}
                                             </div>
-                                            <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                            <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                                               {item.category || 'ללא קטגוריה'}
                                             </div>
                                           </div>
                                           
-                                          {/* Quantity - read only */}
                                           <div className="flex items-center gap-2 flex-shrink-0">
-                                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 w-8 text-center">
+                                            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 w-6 sm:w-8 text-center">
                                               {item.quantity}
                                             </span>
                                           </div>
@@ -2024,11 +2021,11 @@ export default function Home() {
                                 ))
                               ) : (
                                 // Alphabetical list for purchased items
-                                <ul className="space-y-3">
+                                <ul className="space-y-2 sm:space-y-3">
                                   {groupedPurchased['כל הפריטים']?.map((item) => (
                                     <li
                                       key={item.id}
-                                      className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-75 [dir=rtl]:flex-row-reverse"
+                                      className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-75 [dir=rtl]:flex-row-reverse"
                                     >
                                       {selectionModeActive && (
                                         <input
@@ -2040,7 +2037,6 @@ export default function Home() {
                                           aria-label={t.selectAll}
                                         />
                                       )}
-                                      {/* Checkbox - can be unchecked to return item to active list */}
                                       <input
                                         type="checkbox"
                                         checked={item.purchased || false}
@@ -2049,8 +2045,7 @@ export default function Home() {
                                         className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                                       />
                                       
-                                      {/* Image placeholder */}
-                                      <div className="w-16 h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                      <div className="w-10 h-10 sm:w-16 sm:h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
                                         {item.image_url ? (
                                           <img
                                             src={item.image_url}
@@ -2058,23 +2053,21 @@ export default function Home() {
                                             className="w-full h-full object-cover"
                                           />
                                         ) : (
-                                          <ShoppingCart className="h-6 w-6 text-slate-400" />
+                                          <ShoppingCart className="h-4 w-4 sm:h-6 sm:w-6 text-slate-400" />
                                         )}
                                       </div>
                                       
-                                      {/* Item name */}
                                       <div className="flex-1 text-right min-w-0">
-                                        <div className="font-medium text-slate-700 dark:text-slate-200 line-through">
+                                        <div className="font-medium text-sm sm:text-base text-slate-700 dark:text-slate-200 line-through truncate">
                                           {item.name}
                                         </div>
-                                        <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                        <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                                           {item.category || 'ללא קטגוריה'}
                                         </div>
                                       </div>
                                       
-                                      {/* Quantity - read only */}
                                       <div className="flex items-center gap-2 flex-shrink-0">
-                                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400 w-8 text-center">
+                                        <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 w-6 sm:w-8 text-center">
                                           {item.quantity}
                                         </span>
                                       </div>
@@ -2143,7 +2136,8 @@ export default function Home() {
                 newItemNameInputRef.current?.focus();
               }, 500);
             }}
-            className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center [dir=rtl]:right-auto [dir=rtl]:left-6 md:hidden"
+            className="fixed z-50 w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center md:hidden right-6 [dir=rtl]:right-auto [dir=rtl]:left-6"
+            style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
             aria-label="הוסף פריט"
           >
             <Plus className="h-6 w-6" />
@@ -2281,11 +2275,12 @@ export default function Home() {
       {activeUserId && selectedListId && (
         <Button
           onClick={() => setShowAssistant(!showAssistant)}
-          className={`fixed bottom-6 left-6 w-14 h-14 rounded-full shadow-2xl text-white border-0 z-50 [dir=rtl]:left-auto [dir=rtl]:right-6 transition-all duration-200 ${
+          className={`fixed w-14 h-14 rounded-full shadow-2xl text-white border-0 z-50 left-6 [dir=rtl]:left-auto [dir=rtl]:right-6 transition-all duration-200 ${
             showAssistant 
               ? 'bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 scale-110' 
               : 'bg-gradient-to-br from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 hover:scale-110'
           }`}
+          style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
           size="lg"
           title={showAssistant ? "סגור עוזר קניות" : "פתח עוזר קניות"}
         >
