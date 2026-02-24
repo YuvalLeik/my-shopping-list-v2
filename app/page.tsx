@@ -1302,6 +1302,38 @@ export default function Home() {
                         </Select>
                       </div>
 
+                      {/* Quantity */}
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 sm:mb-2 block text-right">
+                          כמות
+                        </label>
+                        <div className="flex items-center gap-2 justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setNewItemQuantity(q => Math.max(1, q - 1))}
+                            disabled={newItemQuantity <= 1 || addingItem}
+                            className="h-9 w-9 p-0"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200 w-8 text-center">
+                            {newItemQuantity}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setNewItemQuantity(q => q + 1)}
+                            disabled={addingItem}
+                            className="h-9 w-9 p-0"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
                       {/* Image */}
                       <div>
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 sm:mb-2 block text-right">
