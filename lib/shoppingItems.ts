@@ -269,6 +269,35 @@ export async function upsertShoppingItemToCatalog(
 }
 
 /**
+ * Force-update an existing shopping_items entry by name (for explicit user edits).
+ * Unlike upsertShoppingItemToCatalog which conditionally updates, this always overwrites.
+ */
+export async function forceUpdateShoppingItemByName(
+  name: string,
+  updates: { category?: string; image_url?: string }
+): Promise<void> {
+  try {
+    const normalizedName = normalizeItemName(name);
+    const { data: existing } = await supabase
+      .from('shopping_items')
+      .select('id')
+      .ilike('name', normalizedName)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('shopping_items')
+        .update(updates)
+        .eq('id', existing.id);
+    }
+  } catch {
+    // Non-critical
+  }
+}
+
+/**
  * Get all distinct categories from shopping_items (non-empty)
  */
 export async function getCategories(): Promise<string[]> {

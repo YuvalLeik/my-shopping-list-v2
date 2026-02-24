@@ -158,6 +158,8 @@ export const t = {
   personalItemDuplicate: 'פריט זה כבר קיים',
   personalItemImageOptional: 'תמונה (אופציונלי)',
   personalItemCategory: 'קטגוריה',
+  editItem: 'ערוך',
+  personalItemUpdated: 'הפריט עודכן בהצלחה',
 
   // Dashboard spending / prices
   spending: 'הוצאות',

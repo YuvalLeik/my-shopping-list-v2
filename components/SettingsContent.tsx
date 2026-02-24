@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Trash2, Plus, Loader2, Search, Link2, Image as ImageIcon, ChevronDown, ChevronUp, X, Check } from 'lucide-react';
+import { Trash2, Plus, Loader2, Search, Link2, Image as ImageIcon, ChevronDown, ChevronUp, X, Check, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { t } from '@/lib/translations';
-import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, getUnmatchedReceiptItems, addUserCatalogItem, deleteUserCatalogItem, updateUserCatalogItemImage, ItemAlias, PersonalItem } from '@/lib/itemAliases';
+import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, getUnmatchedReceiptItems, addUserCatalogItem, deleteUserCatalogItem, updateUserCatalogItemImage, updatePersonalItemDetails, ItemAlias, PersonalItem } from '@/lib/itemAliases';
 import { uploadItemImage } from '@/lib/storage';
 import { toast } from 'sonner';
 import { CATEGORIES } from '@/lib/categories';
@@ -49,6 +49,14 @@ export function SettingsContent({ userId }: SettingsContentProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Edit item state
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editCategory, setEditCategory] = useState('ללא קטגוריה');
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const editFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [showItems, setShowItems] = useState(true);
   const [showAliases, setShowAliases] = useState(true);
@@ -226,6 +234,71 @@ export function SettingsContent({ userId }: SettingsContentProps) {
       await loadPersonalItems();
     } catch {
       toast.error(t.failedToDeleteItem);
+    }
+  };
+
+  const startEditing = (item: PersonalItem) => {
+    setEditingItem(item.name);
+    setEditCategory(item.category || 'ללא קטגוריה');
+    setEditImageFile(null);
+    setEditImagePreview(null);
+    if (editFileInputRef.current) editFileInputRef.current.value = '';
+  };
+
+  const cancelEditing = () => {
+    setEditingItem(null);
+    setEditCategory('ללא קטגוריה');
+    setEditImageFile(null);
+    setEditImagePreview(null);
+    if (editFileInputRef.current) editFileInputRef.current.value = '';
+  };
+
+  const handleEditImageSelect = (file: File | null) => {
+    if (!file) {
+      setEditImageFile(null);
+      setEditImagePreview(null);
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('הקובץ גדול מדי', { description: 'גודל מקסימלי: 5MB' });
+      if (editFileInputRef.current) editFileInputRef.current.value = '';
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('סוג קובץ לא תקין', { description: 'יש לבחור קובץ תמונה בלבד' });
+      if (editFileInputRef.current) editFileInputRef.current.value = '';
+      return;
+    }
+    setEditImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setEditImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+    if (editFileInputRef.current) editFileInputRef.current.value = '';
+  };
+
+  const handleSaveEdit = async (itemName: string, currentItem: PersonalItem) => {
+    setSavingEdit(true);
+    try {
+      const categoryChanged = editCategory !== (currentItem.category || 'ללא קטגוריה');
+
+      if (editImageFile) {
+        // Ensure catalog entry exists and apply category change, then upload image
+        const catalogId = await updatePersonalItemDetails(userId, itemName, {
+          category: categoryChanged ? editCategory : undefined,
+        });
+        const { publicUrl } = await uploadItemImage(editImageFile, catalogId, false);
+        await updatePersonalItemDetails(userId, itemName, { imageUrl: publicUrl });
+      } else if (categoryChanged) {
+        await updatePersonalItemDetails(userId, itemName, { category: editCategory });
+      }
+
+      toast.success(t.personalItemUpdated);
+      cancelEditing();
+      await loadPersonalItems();
+    } catch (err) {
+      toast.error(`${t.failedToAddItem}: ${err instanceof Error ? err.message : ''}`);
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -503,6 +576,9 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{item.name}</p>
+                          {item.category && item.category !== 'ללא קטגוריה' && (
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{item.category}</p>
+                          )}
                           {itemAliases.length > 0 && (
                             <div className="mt-0.5">
                               {itemAliases.map(a => (
@@ -525,18 +601,100 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                             </div>
                           )}
                         </div>
-                        {item.catalog_id && (
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeleteCatalogItem(item.catalog_id!)}
-                            className="h-7 w-7 p-0 text-red-400 hover:text-red-600 flex-shrink-0"
-                            title={t.delete}
+                            onClick={() => editingItem === item.name ? cancelEditing() : startEditing(item)}
+                            className="h-7 w-7 p-0 text-slate-400 hover:text-emerald-600 flex-shrink-0"
+                            title={t.editItem}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                        )}
+                          {item.catalog_id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteCatalogItem(item.catalog_id!)}
+                              className="h-7 w-7 p-0 text-red-400 hover:text-red-600 flex-shrink-0"
+                              title={t.delete}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Inline edit form */}
+                      {editingItem === item.name && (
+                        <div className="mt-2 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2" dir="rtl">
+                          <div>
+                            <label className="text-[11px] text-slate-500 dark:text-slate-400 mb-0.5 block">{t.personalItemCategory}</label>
+                            <select
+                              value={editCategory}
+                              onChange={(e) => setEditCategory(e.target.value)}
+                              className="w-full h-8 text-xs rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-2 text-right"
+                              dir="rtl"
+                            >
+                              {CATEGORIES.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-slate-500 dark:text-slate-400 mb-0.5 block">{t.personalItemImageOptional}</label>
+                            <input
+                              ref={editFileInputRef}
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleEditImageSelect(e.target.files?.[0] ?? null)}
+                              className="hidden"
+                            />
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                type="button"
+                                onClick={() => editFileInputRef.current?.click()}
+                                className="text-xs h-7"
+                              >
+                                <ImageIcon className="h-3 w-3 me-1" />
+                                {item.image_url ? 'החלף תמונה' : 'בחר תמונה'}
+                              </Button>
+                              {editImagePreview && (
+                                <div className="relative">
+                                  <img src={editImagePreview} alt="" className="h-8 w-8 rounded object-cover border border-slate-200 dark:border-slate-700" />
+                                  <button
+                                    onClick={() => { setEditImageFile(null); setEditImagePreview(null); }}
+                                    className="absolute -top-1 -left-1 bg-red-500 text-white rounded-full h-3.5 w-3.5 flex items-center justify-center text-[8px]"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleSaveEdit(item.name, item)}
+                              disabled={savingEdit}
+                              className="text-xs h-7 bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                              {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : t.save}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={cancelEditing}
+                              className="text-xs h-7"
+                            >
+                              {t.cancel}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Per-card attach button / inline input */}
                       {isAttaching ? (

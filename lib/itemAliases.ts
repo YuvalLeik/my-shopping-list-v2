@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { upsertShoppingItemToCatalog } from './shoppingItems';
+import { upsertShoppingItemToCatalog, forceUpdateShoppingItemByName } from './shoppingItems';
 
 export interface ItemAlias {
   id: string;
@@ -25,6 +25,7 @@ export interface MatchedItem {
 export interface PersonalItem {
   name: string;
   image_url: string | null;
+  category?: string;
   source?: 'grocery' | 'catalog';
   catalog_id?: string;
 }
@@ -50,7 +51,7 @@ export async function getUserPersonalItems(userId: string): Promise<PersonalItem
     const listIds = lists.map(l => l.id);
     const { data: items, error: itemsErr } = await supabase
       .from('grocery_items')
-      .select('name, image_url')
+      .select('name, image_url, category')
       .in('list_id', listIds);
 
     if (!itemsErr && items) {
@@ -58,18 +59,18 @@ export async function getUserPersonalItems(userId: string): Promise<PersonalItem
         const norm = normalize(item.name);
         const existing = map.get(norm);
         if (!existing) {
-          map.set(norm, { name: item.name, image_url: item.image_url || null, source: 'grocery' });
+          map.set(norm, { name: item.name, image_url: item.image_url || null, category: item.category || undefined, source: 'grocery' });
         } else if (item.image_url && !existing.image_url) {
-          map.set(norm, { name: item.name, image_url: item.image_url, source: 'grocery' });
+          map.set(norm, { ...existing, name: item.name, image_url: item.image_url, category: item.category || existing.category, source: 'grocery' });
         }
       }
     }
   }
 
-  // Source 2: manually-added catalog items
+  // Source 2: manually-added catalog items (these take priority for category/image)
   const { data: catalogItems, error: catalogErr } = await supabase
     .from('user_catalog_items')
-    .select('id, name, image_url')
+    .select('id, name, image_url, category')
     .eq('local_user_id', userId);
 
   if (!catalogErr && catalogItems) {
@@ -77,11 +78,15 @@ export async function getUserPersonalItems(userId: string): Promise<PersonalItem
       const norm = normalize(item.name);
       const existing = map.get(norm);
       if (!existing) {
-        map.set(norm, { name: item.name, image_url: item.image_url || null, source: 'catalog', catalog_id: item.id });
-      } else if (item.image_url && !existing.image_url) {
-        map.set(norm, { ...existing, image_url: item.image_url, source: 'catalog', catalog_id: item.id });
-      } else if (existing.source !== 'catalog') {
-        existing.catalog_id = item.id;
+        map.set(norm, { name: item.name, image_url: item.image_url || null, category: item.category || undefined, source: 'catalog', catalog_id: item.id });
+      } else {
+        // Catalog entries take priority: overwrite image/category if provided
+        map.set(norm, {
+          ...existing,
+          image_url: item.image_url || existing.image_url,
+          category: item.category || existing.category,
+          catalog_id: item.id,
+        });
       }
     }
   }
@@ -499,4 +504,84 @@ export async function getUserCatalogItems(
 
   if (error || !data) return [];
   return data;
+}
+
+/**
+ * Update an existing personal item's category and/or image across all tables.
+ * Ensures a user_catalog_items entry exists, updates grocery_items, and syncs to global catalog.
+ * Returns the catalog_id for use with image uploads.
+ */
+export async function updatePersonalItemDetails(
+  userId: string,
+  itemName: string,
+  updates: { category?: string; imageUrl?: string }
+): Promise<string> {
+  const trimmed = itemName.trim();
+  const catalogUpdates: Record<string, string> = {};
+  if (updates.category) catalogUpdates.category = updates.category;
+  if (updates.imageUrl) catalogUpdates.image_url = updates.imageUrl;
+
+  // 1. Ensure user_catalog_items entry exists (upsert by name)
+  let catalogId: string;
+  const { data: existing } = await supabase
+    .from('user_catalog_items')
+    .select('id')
+    .eq('local_user_id', userId)
+    .ilike('name', trimmed)
+    .maybeSingle();
+
+  if (existing) {
+    catalogId = existing.id;
+    if (Object.keys(catalogUpdates).length > 0) {
+      const { error } = await supabase
+        .from('user_catalog_items')
+        .update(catalogUpdates)
+        .eq('id', catalogId);
+      if (error) throw new Error(error.message);
+    }
+  } else {
+    const { data: newItem, error } = await supabase
+      .from('user_catalog_items')
+      .insert({
+        local_user_id: userId,
+        name: trimmed,
+        image_url: updates.imageUrl ?? null,
+        category: updates.category ?? 'ללא קטגוריה',
+      })
+      .select('id')
+      .single();
+    if (error) throw new Error(error.message);
+    catalogId = newItem.id;
+  }
+
+  // 2. Update matching grocery_items for this user
+  const { data: lists } = await supabase
+    .from('grocery_lists')
+    .select('id')
+    .eq('local_user_id', userId);
+
+  if (lists?.length) {
+    const groceryUpdates: Record<string, string> = {};
+    if (updates.category) groceryUpdates.category = updates.category;
+    if (updates.imageUrl) groceryUpdates.image_url = updates.imageUrl;
+
+    if (Object.keys(groceryUpdates).length > 0) {
+      await supabase
+        .from('grocery_items')
+        .update(groceryUpdates)
+        .in('list_id', lists.map(l => l.id))
+        .ilike('name', trimmed);
+    }
+  }
+
+  // 3. Sync to global shopping_items catalog
+  const shoppingUpdates: Record<string, string> = {};
+  if (updates.category) shoppingUpdates.category = updates.category;
+  if (updates.imageUrl) shoppingUpdates.image_url = updates.imageUrl;
+
+  if (Object.keys(shoppingUpdates).length > 0) {
+    forceUpdateShoppingItemByName(trimmed, shoppingUpdates).catch(() => {});
+  }
+
+  return catalogId;
 }
