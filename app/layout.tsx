@@ -19,11 +19,21 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
+  themeColor: "#059669",
 };
 
 export const metadata: Metadata = {
   title: "אפליקציית רשימת קניות",
   description: "נהל את רשימות הקניות והפריטים שלך",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "רשימת קניות",
+  },
+  icons: {
+    apple: "/icon-192x192.png",
+  },
 };
 
 export default function RootLayout({
