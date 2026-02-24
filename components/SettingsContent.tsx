@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Trash2, Plus, Loader2, Search, Link2, Image as ImageIcon, ChevronDown, ChevronUp, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { t } from '@/lib/translations';
-import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, getUnmatchedReceiptItems, addUserCatalogItem, deleteUserCatalogItem, ItemAlias, PersonalItem } from '@/lib/itemAliases';
+import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, getUnmatchedReceiptItems, addUserCatalogItem, deleteUserCatalogItem, updateUserCatalogItemImage, ItemAlias, PersonalItem } from '@/lib/itemAliases';
+import { uploadItemImage } from '@/lib/storage';
 import { toast } from 'sonner';
 
 interface SettingsContentProps {
@@ -42,6 +43,10 @@ export function SettingsContent({ userId }: SettingsContentProps) {
   const [showAddItemForm, setShowAddItemForm] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [addingItem, setAddingItem] = useState(false);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [showItems, setShowItems] = useState(true);
   const [showAliases, setShowAliases] = useState(true);
@@ -149,13 +154,55 @@ export function SettingsContent({ userId }: SettingsContentProps) {
     }
   };
 
+  const clearImageState = () => {
+    setSelectedImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleImageSelect = (file: File | null) => {
+    if (!file) {
+      clearImageState();
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('הקובץ גדול מדי', { description: 'גודל מקסימלי: 5MB' });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('סוג קובץ לא תקין', { description: 'יש לבחור קובץ תמונה בלבד' });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setSelectedImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleAddPersonalItem = async () => {
     if (!newItemName.trim()) return;
     setAddingItem(true);
     try {
-      await addUserCatalogItem(userId, newItemName.trim());
+      const newId = await addUserCatalogItem(userId, newItemName.trim());
+
+      if (selectedImageFile) {
+        setUploadingImage(true);
+        try {
+          const { publicUrl } = await uploadItemImage(selectedImageFile, newId, false);
+          await updateUserCatalogItemImage(newId, publicUrl);
+        } catch {
+          toast.error('נכשל בהעלאת התמונה');
+        } finally {
+          setUploadingImage(false);
+        }
+      }
+
       toast.success(t.personalItemAdded);
       setNewItemName('');
+      clearImageState();
       setShowAddItemForm(false);
       await loadPersonalItems();
     } catch (err) {
@@ -341,25 +388,61 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                   <Input
                     value={newItemName}
                     onChange={(e) => setNewItemName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddPersonalItem(); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !selectedImageFile) handleAddPersonalItem(); }}
                     placeholder={t.personalItemName}
                     className="text-right text-sm"
                     dir="rtl"
                     autoFocus
                   />
+                  <div>
+                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block text-right">
+                      {t.personalItemImageOptional}
+                    </label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageSelect(e.target.files?.[0] ?? null)}
+                      disabled={addingItem || uploadingImage}
+                      className="w-full text-sm"
+                    />
+                    {imagePreview && (
+                      <div className="relative inline-block mt-2">
+                        <img
+                          src={imagePreview}
+                          alt="Preview"
+                          className="w-20 h-20 object-cover rounded border border-slate-200 dark:border-slate-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={clearImageState}
+                          disabled={addingItem || uploadingImage}
+                          className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 disabled:opacity-50"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                    {uploadingImage && (
+                      <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>מעלה תמונה...</span>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex gap-2 [dir=rtl]:flex-row-reverse">
                     <Button
                       onClick={handleAddPersonalItem}
-                      disabled={addingItem || !newItemName.trim()}
+                      disabled={addingItem || uploadingImage || !newItemName.trim()}
                       size="sm"
                       className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
                     >
-                      {addingItem ? <Loader2 className="h-3 w-3 animate-spin" /> : t.add}
+                      {(addingItem || uploadingImage) ? <Loader2 className="h-3 w-3 animate-spin" /> : t.add}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => { setShowAddItemForm(false); setNewItemName(''); }}
+                      onClick={() => { setShowAddItemForm(false); setNewItemName(''); clearImageState(); }}
                       className="text-xs"
                     >
                       {t.cancel}

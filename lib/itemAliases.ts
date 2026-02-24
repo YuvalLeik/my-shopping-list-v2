@@ -436,22 +436,37 @@ export async function addUserCatalogItem(
   userId: string,
   name: string,
   imageUrl?: string | null
-): Promise<void> {
+): Promise<string> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Item name cannot be empty');
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('user_catalog_items')
     .insert({
       local_user_id: userId,
       name: trimmed,
       image_url: imageUrl ?? null,
-    });
+    })
+    .select('id')
+    .single();
 
   if (error) {
     if (error.code === '23505') throw new Error('DUPLICATE');
     throw new Error(error.message);
   }
+
+  return data.id;
+}
+
+export async function updateUserCatalogItemImage(
+  itemId: string,
+  imageUrl: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('user_catalog_items')
+    .update({ image_url: imageUrl })
+    .eq('id', itemId);
+  if (error) throw new Error(error.message);
 }
 
 export async function deleteUserCatalogItem(itemId: string): Promise<void> {
