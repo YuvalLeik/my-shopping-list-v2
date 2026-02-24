@@ -366,16 +366,16 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                             variant="ghost"
                             size="sm"
                             onClick={() => { setMatchingUnmatched(null); setUnmatchedSearch(''); }}
-                            className="h-6 w-6 p-0"
+                            className="h-9 w-9 p-0"
                           >
-                            <X className="h-3.5 w-3.5" />
+                            <X className="h-4 w-4" />
                           </Button>
                         ) : (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => { setMatchingUnmatched(receiptName); setUnmatchedSearch(''); }}
-                            className="h-7 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50"
+                            className="h-9 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50"
                           >
                             {t.attachItem}
                           </Button>
@@ -384,12 +384,12 @@ export function SettingsContent({ userId }: SettingsContentProps) {
 
                       {matchingUnmatched === receiptName && (
                         <div className="mt-2 space-y-1.5">
-                          <p className="text-[11px] text-slate-500">{t.settingsPickItem}</p>
+                          <p className="text-xs text-slate-500">{t.settingsPickItem}</p>
                           <Input
                             value={unmatchedSearch}
                             onChange={(e) => setUnmatchedSearch(e.target.value)}
                             placeholder={t.searchMyItems}
-                            className="text-right text-sm h-8"
+                            className="text-right text-sm"
                             dir="rtl"
                             autoFocus
                           />
@@ -452,9 +452,9 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAddItemForm(!showAddItemForm)}
-                  className="text-xs flex-shrink-0"
+                  className="text-xs sm:text-sm h-9 flex-shrink-0"
                 >
-                  <Plus className="h-3 w-3 me-1" />
+                  <Plus className="h-3.5 w-3.5 me-1" />
                   {t.addPersonalItem}
                 </Button>
               </div>
@@ -477,7 +477,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                     <select
                       value={newItemCategory}
                       onChange={(e) => setNewItemCategory(e.target.value)}
-                      className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-right shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      className="w-full h-11 sm:h-10 rounded-md border border-input bg-background px-3 py-1 text-sm text-right shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       dir="rtl"
                     >
                       {CATEGORIES.map((cat) => (
@@ -526,7 +526,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                       onClick={handleAddPersonalItem}
                       disabled={addingItem || uploadingImage || !newItemName.trim()}
                       size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9"
                     >
                       {(addingItem || uploadingImage) ? <Loader2 className="h-3 w-3 animate-spin" /> : t.add}
                     </Button>
@@ -534,7 +534,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                       variant="outline"
                       size="sm"
                       onClick={() => { setShowAddItemForm(false); setNewItemName(''); setNewItemCategory('ללא קטגוריה'); clearImageState(); }}
-                      className="text-xs"
+                      className="text-xs h-9"
                     >
                       {t.cancel}
                     </Button>
@@ -577,14 +577,14 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{item.name}</p>
                           {item.category && item.category !== 'ללא קטגוריה' && (
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{item.category}</p>
+                            <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{item.category}</p>
                           )}
                           {itemAliases.length > 0 && (
                             <div className="mt-0.5">
                               {itemAliases.map(a => (
                                 <div key={a.id} className="flex items-center gap-1 [dir=rtl]:flex-row-reverse">
                                   <Link2 className="h-3 w-3 text-emerald-500 flex-shrink-0" />
-                                  <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                  <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
                                     {a.alias_name}
                                     {a.store_name && <span className="text-slate-400"> ({a.store_name})</span>}
                                   </span>
@@ -592,9 +592,9 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleDeleteAlias(a.id)}
-                                    className="h-4 w-4 p-0 text-red-400 hover:text-red-600 flex-shrink-0 ms-1"
+                                    className="h-7 w-7 p-0 text-red-400 hover:text-red-600 flex-shrink-0 ms-1"
                                   >
-                                    <Trash2 className="h-2.5 w-2.5" />
+                                    <Trash2 className="h-3 w-3" />
                                   </Button>
                                 </div>
                               ))}
@@ -606,20 +606,20 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                             variant="ghost"
                             size="sm"
                             onClick={() => editingItem === item.name ? cancelEditing() : startEditing(item)}
-                            className="h-7 w-7 p-0 text-slate-400 hover:text-emerald-600 flex-shrink-0"
+                            className="h-9 w-9 p-0 text-slate-400 hover:text-emerald-600 flex-shrink-0"
                             title={t.editItem}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <Pencil className="h-4 w-4" />
                           </Button>
                           {item.catalog_id && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteCatalogItem(item.catalog_id!)}
-                              className="h-7 w-7 p-0 text-red-400 hover:text-red-600 flex-shrink-0"
+                              className="h-9 w-9 p-0 text-red-400 hover:text-red-600 flex-shrink-0"
                               title={t.delete}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
                         </div>
@@ -629,11 +629,11 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                       {editingItem === item.name && (
                         <div className="mt-2 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-2" dir="rtl">
                           <div>
-                            <label className="text-[11px] text-slate-500 dark:text-slate-400 mb-0.5 block">{t.personalItemCategory}</label>
+                            <label className="text-xs text-slate-500 dark:text-slate-400 mb-0.5 block">{t.personalItemCategory}</label>
                             <select
                               value={editCategory}
                               onChange={(e) => setEditCategory(e.target.value)}
-                              className="w-full h-8 text-xs rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-2 text-right"
+                              className="w-full h-10 text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 text-right"
                               dir="rtl"
                             >
                               {CATEGORIES.map(cat => (
@@ -642,7 +642,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                             </select>
                           </div>
                           <div>
-                            <label className="text-[11px] text-slate-500 dark:text-slate-400 mb-0.5 block">{t.personalItemImageOptional}</label>
+                            <label className="text-xs text-slate-500 dark:text-slate-400 mb-0.5 block">{t.personalItemImageOptional}</label>
                             <input
                               ref={editFileInputRef}
                               type="file"
@@ -656,17 +656,17 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                                 size="sm"
                                 type="button"
                                 onClick={() => editFileInputRef.current?.click()}
-                                className="text-xs h-7"
+                                className="text-xs h-9"
                               >
-                                <ImageIcon className="h-3 w-3 me-1" />
+                                <ImageIcon className="h-3.5 w-3.5 me-1" />
                                 {item.image_url ? 'החלף תמונה' : 'בחר תמונה'}
                               </Button>
                               {editImagePreview && (
                                 <div className="relative">
-                                  <img src={editImagePreview} alt="" className="h-8 w-8 rounded object-cover border border-slate-200 dark:border-slate-700" />
+                                  <img src={editImagePreview} alt="" className="h-14 w-14 rounded object-cover border border-slate-200 dark:border-slate-700" />
                                   <button
                                     onClick={() => { setEditImageFile(null); setEditImagePreview(null); }}
-                                    className="absolute -top-1 -left-1 bg-red-500 text-white rounded-full h-3.5 w-3.5 flex items-center justify-center text-[8px]"
+                                    className="absolute -top-1 -left-1 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-[10px]"
                                   >
                                     ✕
                                   </button>
@@ -680,7 +680,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                               size="sm"
                               onClick={() => handleSaveEdit(item.name, item)}
                               disabled={savingEdit}
-                              className="text-xs h-7 bg-emerald-600 hover:bg-emerald-700 text-white"
+                              className="text-xs h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
                             >
                               {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : t.save}
                             </Button>
@@ -688,7 +688,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                               variant="outline"
                               size="sm"
                               onClick={cancelEditing}
-                              className="text-xs h-7"
+                              className="text-xs h-9"
                             >
                               {t.cancel}
                             </Button>
@@ -704,7 +704,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                             onChange={(e) => setAttachCardInput(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') handleCardAttach(item.name); }}
                             placeholder={t.settingsTypeReceiptName}
-                            className="flex-1 text-right text-xs h-7"
+                            className="flex-1 text-right text-xs h-9"
                             dir="rtl"
                             autoFocus
                           />
@@ -713,17 +713,17 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                             size="sm"
                             onClick={() => handleCardAttach(item.name)}
                             disabled={!attachCardInput.trim()}
-                            className="h-7 w-7 p-0 text-emerald-600"
+                            className="h-9 w-9 p-0 text-emerald-600"
                           >
-                            <Check className="h-3.5 w-3.5" />
+                            <Check className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => { setAttachCardItem(null); setAttachCardInput(''); }}
-                            className="h-7 w-7 p-0 text-slate-400"
+                            className="h-9 w-9 p-0 text-slate-400"
                           >
-                            <X className="h-3.5 w-3.5" />
+                            <X className="h-4 w-4" />
                           </Button>
                         </div>
                       ) : (
@@ -731,7 +731,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                           variant="ghost"
                           size="sm"
                           onClick={() => { setAttachCardItem(item.name); setAttachCardInput(''); }}
-                          className="mt-1.5 h-6 text-[11px] text-emerald-600 hover:text-emerald-700 px-1 w-full justify-start [dir=rtl]:justify-end"
+                          className="mt-1.5 h-8 text-xs text-emerald-600 hover:text-emerald-700 px-1 w-full justify-start [dir=rtl]:justify-end"
                         >
                           <Plus className="h-3 w-3 me-0.5" />
                           {t.settingsAttachReceiptName}
@@ -771,9 +771,9 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowAddForm(!showAddForm)}
-                className="text-xs flex-shrink-0"
+                className="text-xs sm:text-sm h-9 flex-shrink-0"
               >
-                <Plus className="h-3 w-3 me-1" />
+                <Plus className="h-3.5 w-3.5 me-1" />
                 {t.addAlias}
               </Button>
             </div>
@@ -813,7 +813,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                     onClick={handleAddAlias}
                     disabled={adding || !newCanonical.trim() || !newAlias.trim()}
                     size="sm"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9"
                   >
                     {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : t.add}
                   </Button>
@@ -821,7 +821,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                     variant="outline"
                     size="sm"
                     onClick={() => setShowAddForm(false)}
-                    className="text-xs"
+                    className="text-xs h-9"
                   >
                     {t.cancel}
                   </Button>
@@ -874,9 +874,9 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteAlias(alias.id)}
-                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700 flex-shrink-0"
+                              className="h-9 w-9 p-0 text-red-500 hover:text-red-700 flex-shrink-0"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         ))}
