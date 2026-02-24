@@ -109,16 +109,20 @@ export default function Home() {
       return;
     }
 
+    let cancelled = false;
     const userId = activeUserId;
     async function loadItemNames() {
       try {
         const names = await getAllItemNames(userId);
+        if (cancelled) return;
         setAllItemNames(names);
       } catch (err) {
+        if (cancelled) return;
         console.error('Failed to load item names:', err);
       }
     }
     loadItemNames();
+    return () => { cancelled = true; };
   }, [activeUserId]);
 
   // Load standalone purchases when active user changes
@@ -127,16 +131,20 @@ export default function Home() {
       setStandalonePurchases([]);
       return;
     }
+    let cancelled = false;
     fetchStandalonePurchaseRecords(activeUserId)
-      .then(setStandalonePurchases)
-      .catch(() => setStandalonePurchases([]));
+      .then(data => { if (!cancelled) setStandalonePurchases(data); })
+      .catch(() => { if (!cancelled) setStandalonePurchases([]); });
+    return () => { cancelled = true; };
   }, [activeUserId]);
 
   // Load users and active user name
   useEffect(() => {
+    let cancelled = false;
     async function loadUsers() {
       try {
         const loadedUsers = await fetchLocalUsers();
+        if (cancelled) return;
         setUsers(loadedUsers);
 
         if (loadedUsers.length === 0) {
@@ -159,12 +167,14 @@ export default function Home() {
           setActiveUserName(activeUser?.name || null);
         }
       } catch (err) {
+        if (cancelled) return;
         console.error('Failed to load users:', err);
       } finally {
-        setLoadingUsers(false);
+        if (!cancelled) setLoadingUsers(false);
       }
     }
     loadUsers();
+    return () => { cancelled = true; };
   }, [activeUserId]);
 
   // Update active user name when activeUserId changes
@@ -198,25 +208,26 @@ export default function Home() {
       return;
     }
 
+    let cancelled = false;
     const userId = activeUserId;
     async function loadLists() {
       try {
         const loadedLists = await fetchGroceryLists(userId);
+        if (cancelled) return;
         setLists(loadedLists);
-        // Always select the first active list
         if (loadedLists.length > 0) {
           setSelectedListId(loadedLists[0].id);
           setListTitle(loadedLists[0].title);
         } else {
-          // If no active lists, create a new one with default title automatically
           try {
             const defaultTitle = 'רשימה חדשה';
             const newList = await createGroceryList(userId, defaultTitle);
+            if (cancelled) return;
             setLists([newList]);
             setSelectedListId(newList.id);
             setListTitle(newList.title);
           } catch (createErr) {
-            // Failed to create default list - error already shown via toast
+            if (cancelled) return;
             toast.error('נכשל ביצירת רשימה חדשה', {
               description: createErr instanceof Error ? createErr.message : 'Unknown error',
             });
@@ -224,47 +235,47 @@ export default function Home() {
             setListTitle('');
           }
         }
-    } catch (err) {
-      toast.error(t.failedToLoadLists, {
-        description: err instanceof Error ? err.message : 'Unknown error',
-      });
-    }
+      } catch (err) {
+        if (cancelled) return;
+        toast.error(t.failedToLoadLists, {
+          description: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
     }
     loadLists();
+    return () => { cancelled = true; };
   }, [activeUserId]);
 
-  // Load items when selected list changes
+  // Load items when selected list or active user changes
   useEffect(() => {
     setSelectedItemIds(new Set());
     setSelectionModeActive(false);
-    if (!selectedListId) {
+    if (!selectedListId || !activeUserId) {
       setItems([]);
       return;
     }
 
+    let cancelled = false;
     const listId = selectedListId;
+    const userId = activeUserId;
     setLoadingItems(true);
     async function loadItems() {
-      if (!activeUserId) {
-        setItems([]);
-        setLoadingItems(false);
-        return;
-      }
-      
-      const userId = activeUserId;
       try {
         const loadedItems = await fetchGroceryItems(listId, userId);
+        if (cancelled) return;
         setItems(loadedItems);
       } catch (err) {
+        if (cancelled) return;
         toast.error(t.failedToLoadItems, {
           description: err instanceof Error ? err.message : 'Unknown error',
         });
       } finally {
-        setLoadingItems(false);
+        if (!cancelled) setLoadingItems(false);
       }
     }
     loadItems();
-  }, [selectedListId]);
+    return () => { cancelled = true; };
+  }, [selectedListId, activeUserId]);
 
   // Filter suggestions based on input
   useEffect(() => {
