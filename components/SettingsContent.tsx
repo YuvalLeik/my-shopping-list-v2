@@ -9,6 +9,7 @@ import { t } from '@/lib/translations';
 import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, getUnmatchedReceiptItems, addUserCatalogItem, deleteUserCatalogItem, updateUserCatalogItemImage, ItemAlias, PersonalItem } from '@/lib/itemAliases';
 import { uploadItemImage } from '@/lib/storage';
 import { toast } from 'sonner';
+import { CATEGORIES } from '@/lib/categories';
 
 interface SettingsContentProps {
   userId: string;
@@ -43,6 +44,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
   const [showAddItemForm, setShowAddItemForm] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [addingItem, setAddingItem] = useState(false);
+  const [newItemCategory, setNewItemCategory] = useState('ללא קטגוריה');
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -186,7 +188,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
     if (!newItemName.trim()) return;
     setAddingItem(true);
     try {
-      const newId = await addUserCatalogItem(userId, newItemName.trim());
+      const newId = await addUserCatalogItem(userId, newItemName.trim(), null, newItemCategory);
 
       if (selectedImageFile) {
         setUploadingImage(true);
@@ -202,6 +204,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
 
       toast.success(t.personalItemAdded);
       setNewItemName('');
+      setNewItemCategory('ללא קטגוריה');
       clearImageState();
       setShowAddItemForm(false);
       await loadPersonalItems();
@@ -396,6 +399,21 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                   />
                   <div>
                     <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block text-right">
+                      {t.personalItemCategory}
+                    </label>
+                    <select
+                      value={newItemCategory}
+                      onChange={(e) => setNewItemCategory(e.target.value)}
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-right shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      dir="rtl"
+                    >
+                      {CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block text-right">
                       {t.personalItemImageOptional}
                     </label>
                     <input
@@ -442,7 +460,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => { setShowAddItemForm(false); setNewItemName(''); clearImageState(); }}
+                      onClick={() => { setShowAddItemForm(false); setNewItemName(''); setNewItemCategory('ללא קטגוריה'); clearImageState(); }}
                       className="text-xs"
                     >
                       {t.cancel}

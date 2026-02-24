@@ -157,6 +157,7 @@ export const t = {
   personalItemDeleted: 'הפריט הוסר',
   personalItemDuplicate: 'פריט זה כבר קיים',
   personalItemImageOptional: 'תמונה (אופציונלי)',
+  personalItemCategory: 'קטגוריה',
 
   // Dashboard spending / prices
   spending: 'הוצאות',

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { upsertShoppingItemToCatalog } from './shoppingItems';
 
 export interface ItemAlias {
   id: string;
@@ -435,10 +436,13 @@ export async function matchReceiptItems(
 export async function addUserCatalogItem(
   userId: string,
   name: string,
-  imageUrl?: string | null
+  imageUrl?: string | null,
+  category?: string
 ): Promise<string> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Item name cannot be empty');
+
+  const cat = category || 'ללא קטגוריה';
 
   const { data, error } = await supabase
     .from('user_catalog_items')
@@ -446,6 +450,7 @@ export async function addUserCatalogItem(
       local_user_id: userId,
       name: trimmed,
       image_url: imageUrl ?? null,
+      category: cat,
     })
     .select('id')
     .single();
@@ -454,6 +459,12 @@ export async function addUserCatalogItem(
     if (error.code === '23505') throw new Error('DUPLICATE');
     throw new Error(error.message);
   }
+
+  // Sync to global shopping_items catalog so this item appears in
+  // the main page autocomplete for all users
+  upsertShoppingItemToCatalog(trimmed, cat, imageUrl ?? undefined).catch(() => {
+    // Non-critical -- don't fail the add if catalog sync fails
+  });
 
   return data.id;
 }

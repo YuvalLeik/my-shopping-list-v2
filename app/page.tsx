@@ -36,18 +36,7 @@ import { ImportReceiptPanel } from '@/app/components/ImportReceiptPanel';
 import { t } from '@/lib/translations';
 import { fetchLocalUsers, LocalUser } from '@/lib/localUsers';
 import { resolveItemDisplayInfo } from '@/lib/itemAliases';
-
-const CATEGORIES = [
-  'ללא קטגוריה',
-  'מזווה',
-  'ירקות ופירות',
-  'מוצרי חלב וביצים',
-  'בשר ודגים',
-  'משקאות',
-  'מוצרי ניקיון והיגיינה',
-  'קפואים',
-  'אחר',
-];
+import { CATEGORIES } from '@/lib/categories';
 
 export default function Home() {
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
