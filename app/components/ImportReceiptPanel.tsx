@@ -11,6 +11,7 @@ import type { ParsedReceipt, ParsedItem } from '@/lib/receiptParser';
 import { GroceryList } from '@/lib/groceryLists';
 import { matchReceiptItems, upsertAlias, MatchedItem, getUserPersonalItems, PersonalItem } from '@/lib/itemAliases';
 import { recordPrices } from '@/lib/itemPrices';
+import { autoMatchPurchaseToGroceryItems } from '@/lib/purchaseRecords';
 
 interface ImportReceiptPanelProps {
   userId: string;
@@ -215,6 +216,16 @@ export function ImportReceiptPanel({
       if (!json.success) throw new Error(json.error || 'Save failed');
 
       const purchaseRecordId = json.data?.id || null;
+
+      // Auto-match purchase items to grocery items when linked to a list
+      if (purchaseRecordId && linkedListId) {
+        const canonicalNames = matchedItems.length > 0
+          ? matchedItems.map(m => m.matchedCanonicalName || m.originalName)
+          : finalItems.map(i => i.name);
+        try {
+          await autoMatchPurchaseToGroceryItems(purchaseRecordId, linkedListId, canonicalNames);
+        } catch { /* non-critical */ }
+      }
 
       // Save aliases for confirmed matches
       for (const m of matchedItems) {

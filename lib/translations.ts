@@ -161,6 +161,24 @@ export const t = {
   editItem: 'ערוך',
   personalItemUpdated: 'הפריט עודכן בהצלחה',
 
+  // Reconciliation & enhanced dashboard
+  reconciliation: 'התאמת רשימה לקבלה',
+  plannedVsActualSection: 'מתוכנן מול בפועל',
+  fulfillmentRate: 'אחוז מילוי',
+  extraItemsRate: 'פריטים נוספים לקנייה',
+  totalActualSpending: 'סה״כ הוצאות בפועל',
+  reconciledTrips: 'קניות עם התאמה',
+  matchedItems: 'פריטים שנקנו',
+  missedItems: 'לא נקנו',
+  extraItems: 'פריטים נוספים',
+  recentReconciliations: 'התאמות אחרונות',
+  noReconciliations: 'אין עדיין התאמות. שייך קבלה לרשימה כדי לראות נתונים.',
+  storeBasketComparison: 'השוואת סלים לפי חנות',
+  avgBasketCost: 'עלות סל ממוצעת',
+  trips: 'קניות',
+  spendingByCategory: 'הוצאות לפי קטגוריה',
+  noSpendingByCategory: 'אין מידע על הוצאות לפי קטגוריה',
+
   // Dashboard spending / prices
   spending: 'הוצאות',
   totalSpending: 'סה״כ הוצאות',

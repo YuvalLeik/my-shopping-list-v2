@@ -1,11 +1,16 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Loader2, ShoppingCart, ListChecks, TrendingUp, Search, X, DollarSign } from 'lucide-react';
+import { Loader2, ShoppingCart, ListChecks, TrendingUp, Search, X, DollarSign, CheckCircle2, XCircle, PlusCircle, Store, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   getDashboardStats, DashboardStats, getAllPurchasedItemNames, getItemMonthlyTrend, MonthlyTrend,
   getTopItemsBySpending, SpendingItem, getMonthlySpendingStats, MonthlySpendingPoint,
   getTotalSpending, getItemPriceHistory, PricePoint, getStorePriceComparison, StorePriceComparison,
+  getPlannedVsActualStats, PlannedVsActualStats,
+  getRecentReconciliations, RecentReconciliation,
+  getListReconciliation, ReconciliationData,
+  getStoreComparisonByBasket, StoreBasketComparison,
+  getSpendingByCategory, SpendingByCategory,
 } from '@/lib/analytics';
 import { t } from '@/lib/translations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -122,6 +127,38 @@ const renderCustomizedLabel = (props: {
   );
 };
 
+const renderSpendingLabel = (props: {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  percent?: number;
+  category?: string;
+  totalSpent?: number;
+}) => {
+  const { cx = 0, cy = 0, midAngle = 0, innerRadius = 0, outerRadius = 0, percent = 0, category = '', totalSpent = 0 } = props;
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  if (percent < 0.05) return null;
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#374151"
+      textAnchor={x > cx ? 'start' : 'end'}
+      dominantBaseline="central"
+      className="text-xs font-medium"
+    >
+      {category} (₪{Math.round(totalSpent)})
+    </text>
+  );
+};
+
 export function Dashboard({ userId }: DashboardProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,6 +170,17 @@ export function Dashboard({ userId }: DashboardProps) {
   const [itemTrend, setItemTrend] = useState<MonthlyTrend[]>([]);
   const [itemTrendLoading, setItemTrendLoading] = useState(false);
   const [showItemDropdown, setShowItemDropdown] = useState(false);
+
+  // Reconciliation state
+  const [plannedVsActual, setPlannedVsActual] = useState<PlannedVsActualStats | null>(null);
+  const [recentRecons, setRecentRecons] = useState<RecentReconciliation[]>([]);
+  const [expandedReconId, setExpandedReconId] = useState<string | null>(null);
+  const [expandedReconData, setExpandedReconData] = useState<ReconciliationData | null>(null);
+  const [expandedReconLoading, setExpandedReconLoading] = useState(false);
+
+  // Store basket & category spending
+  const [storeBaskets, setStoreBaskets] = useState<StoreBasketComparison[]>([]);
+  const [spendingByCat, setSpendingByCat] = useState<SpendingByCategory[]>([]);
 
   // Spending & price state
   const [totalSpending, setTotalSpending] = useState(0);
@@ -174,18 +222,26 @@ export function Dashboard({ userId }: DashboardProps) {
       }
       setLoading(true);
       try {
-        const [data, itemNames, spending, topSpend, monthSpend] = await Promise.all([
+        const [data, itemNames, spending, topSpend, monthSpend, pva, recons, baskets, catSpend] = await Promise.all([
           getDashboardStats(currentUserId),
           getAllPurchasedItemNames(currentUserId),
           getTotalSpending(currentUserId),
           getTopItemsBySpending(currentUserId, 10),
           getMonthlySpendingStats(currentUserId),
+          getPlannedVsActualStats(currentUserId),
+          getRecentReconciliations(currentUserId, 10),
+          getStoreComparisonByBasket(currentUserId),
+          getSpendingByCategory(currentUserId),
         ]);
         setStats(data);
         setAllItemNames(itemNames);
         setTotalSpending(spending);
         setTopBySpending(topSpend);
         setMonthlySpending(monthSpend);
+        setPlannedVsActual(pva);
+        setRecentRecons(recons);
+        setStoreBaskets(baskets);
+        setSpendingByCat(catSpend);
       } catch (error) {
         console.error('Failed to load dashboard stats:', error);
         setStats({
@@ -280,6 +336,24 @@ export function Dashboard({ userId }: DashboardProps) {
     setStoreComparison([]);
   };
 
+  const handleToggleRecon = async (listId: string) => {
+    if (expandedReconId === listId) {
+      setExpandedReconId(null);
+      setExpandedReconData(null);
+      return;
+    }
+    setExpandedReconId(listId);
+    setExpandedReconLoading(true);
+    try {
+      const data = await getListReconciliation(userId!, listId);
+      setExpandedReconData(data);
+    } catch {
+      setExpandedReconData(null);
+    } finally {
+      setExpandedReconLoading(false);
+    }
+  };
+
   if (!userId) {
     return (
       <div className="p-8 text-center">
@@ -369,6 +443,317 @@ export function Dashboard({ userId }: DashboardProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Planned vs Actual Section */}
+      {plannedVsActual && plannedVsActual.totalReconciled > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t.plannedVsActualSection}</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Fulfillment Rate */}
+            <Card className="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-900/30 dark:to-green-800/20 border-green-200/50 dark:border-green-700/50 shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">{t.fulfillmentRate}</p>
+                    <p className="text-2xl font-bold text-green-900 dark:text-green-100">{plannedVsActual.avgFulfillmentRate}%</p>
+                  </div>
+                  <div className="p-2 bg-green-500/10 rounded-full">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                </div>
+                <div className="mt-2 w-full bg-green-200 dark:bg-green-800 rounded-full h-2">
+                  <div
+                    className="bg-green-500 h-2 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, plannedVsActual.avgFulfillmentRate)}%` }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Extra Items Rate */}
+            <Card className="bg-gradient-to-br from-sky-50 to-sky-100/50 dark:from-sky-900/30 dark:to-sky-800/20 border-sky-200/50 dark:border-sky-700/50 shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-sky-700 dark:text-sky-300 mb-1">{t.extraItemsRate}</p>
+                    <p className="text-2xl font-bold text-sky-900 dark:text-sky-100">{plannedVsActual.avgExtrasPerTrip}</p>
+                  </div>
+                  <div className="p-2 bg-sky-500/10 rounded-full">
+                    <PlusCircle className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Total Actual Spending */}
+            {plannedVsActual.totalActualSpent != null && (
+              <Card className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-900/30 dark:to-amber-800/20 border-amber-200/50 dark:border-amber-700/50 shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-1">{t.totalActualSpending}</p>
+                      <p className="text-2xl font-bold text-amber-900 dark:text-amber-100">₪{plannedVsActual.totalActualSpent.toLocaleString()}</p>
+                    </div>
+                    <div className="p-2 bg-amber-500/10 rounded-full">
+                      <DollarSign className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Reconciled Trips */}
+            <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 dark:from-indigo-900/30 dark:to-indigo-800/20 border-indigo-200/50 dark:border-indigo-700/50 shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300 mb-1">{t.reconciledTrips}</p>
+                    <p className="text-2xl font-bold text-indigo-900 dark:text-indigo-100">{plannedVsActual.totalReconciled}</p>
+                  </div>
+                  <div className="p-2 bg-indigo-500/10 rounded-full">
+                    <ListChecks className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Recent Reconciliations List */}
+      {recentRecons.length > 0 && (
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {t.recentReconciliations}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-2">
+            {recentRecons.map((r) => (
+              <div key={r.listId} className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => handleToggleRecon(r.listId)}
+                  className="w-full flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-right"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">{r.listTitle}</span>
+                      {r.storeName && (
+                        <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                          <Store className="h-3 w-3" />{r.storeName}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs">
+                      <span className="text-green-600 dark:text-green-400 flex items-center gap-0.5">
+                        <CheckCircle2 className="h-3 w-3" />{r.matchedCount} {t.matchedItems}
+                      </span>
+                      <span className="text-red-500 dark:text-red-400 flex items-center gap-0.5">
+                        <XCircle className="h-3 w-3" />{r.missedCount} {t.missedItems}
+                      </span>
+                      <span className="text-sky-600 dark:text-sky-400 flex items-center gap-0.5">
+                        <PlusCircle className="h-3 w-3" />{r.extrasCount} {t.extraItems}
+                      </span>
+                      {r.totalSpent != null && r.totalSpent > 0 && (
+                        <span className="text-amber-600 dark:text-amber-400">₪{r.totalSpent.toLocaleString()}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ms-2">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      r.fulfillmentRate >= 80 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                      r.fulfillmentRate >= 50 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                      'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                    }`}>
+                      {r.fulfillmentRate}%
+                    </span>
+                    {expandedReconId === r.listId ? (
+                      <ChevronUp className="h-4 w-4 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-slate-400" />
+                    )}
+                  </div>
+                </button>
+
+                {expandedReconId === r.listId && (
+                  <div className="border-t border-slate-200 dark:border-slate-700 p-3 bg-slate-50/50 dark:bg-slate-800/30">
+                    {expandedReconLoading ? (
+                      <div className="flex justify-center py-4">
+                        <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+                      </div>
+                    ) : expandedReconData ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* Matched */}
+                        {expandedReconData.matched.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-green-700 dark:text-green-400 mb-1.5 flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> {t.matchedItems} ({expandedReconData.matched.length})
+                            </h4>
+                            <ul className="space-y-1">
+                              {expandedReconData.matched.map((m, i) => (
+                                <li key={i} className="text-xs text-slate-700 dark:text-slate-300 flex justify-between gap-1">
+                                  <span className="truncate">{m.groceryItem}</span>
+                                  {m.price != null && <span className="text-slate-500 flex-shrink-0">₪{m.price}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Not Purchased */}
+                        {expandedReconData.notPurchased.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1.5 flex items-center gap-1">
+                              <XCircle className="h-3.5 w-3.5" /> {t.missedItems} ({expandedReconData.notPurchased.length})
+                            </h4>
+                            <ul className="space-y-1">
+                              {expandedReconData.notPurchased.map((m, i) => (
+                                <li key={i} className="text-xs text-slate-700 dark:text-slate-300 flex justify-between gap-1">
+                                  <span className="truncate">{m.name}</span>
+                                  <span className="text-slate-400 flex-shrink-0">x{m.quantity}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Extras */}
+                        {expandedReconData.extras.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-semibold text-sky-600 dark:text-sky-400 mb-1.5 flex items-center gap-1">
+                              <PlusCircle className="h-3.5 w-3.5" /> {t.extraItems} ({expandedReconData.extras.length})
+                            </h4>
+                            <ul className="space-y-1">
+                              {expandedReconData.extras.map((m, i) => (
+                                <li key={i} className="text-xs text-slate-700 dark:text-slate-300 flex justify-between gap-1">
+                                  <span className="truncate">{m.name}</span>
+                                  {m.price != null && <span className="text-slate-500 flex-shrink-0">₪{m.price}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 text-center py-2">לא נמצאו נתונים</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Store Basket Comparison */}
+      {storeBaskets.length > 0 && (
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {t.storeBasketComparison}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="h-[280px] sm:h-[320px] mt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={storeBaskets}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis
+                    dataKey="storeName"
+                    tick={{ fill: '#374151', fontSize: 11, fontWeight: 500 }}
+                    axisLine={{ stroke: '#cbd5e1' }}
+                    tickLine={{ stroke: '#cbd5e1' }}
+                    interval={0}
+                    angle={-30}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis
+                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    axisLine={{ stroke: '#cbd5e1' }}
+                    tickLine={{ stroke: '#cbd5e1' }}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend
+                    formatter={(value) => (
+                      <span className="text-sm text-slate-700 dark:text-slate-300">{value}</span>
+                    )}
+                  />
+                  <Bar
+                    dataKey="avgBasketCost"
+                    fill={CHART_COLORS.info}
+                    name={`₪ ${t.avgBasketCost}`}
+                    radius={[4, 4, 0, 0]}
+                  >
+                    {storeBaskets.map((_, index) => (
+                      <Cell key={`basket-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Bar>
+                  <Bar
+                    dataKey="tripCount"
+                    fill={CHART_COLORS.secondary}
+                    name={t.trips}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Spending by Category */}
+      {spendingByCat.length > 0 && (
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {t.spendingByCategory}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="h-[300px] sm:h-[350px] mt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={spendingByCat}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={renderSpendingLabel as (props: unknown) => React.ReactNode}
+                    outerRadius="70%"
+                    innerRadius="40%"
+                    dataKey="totalSpent"
+                    nameKey="category"
+                    paddingAngle={2}
+                  >
+                    {spendingByCat.map((_, index) => (
+                      <Cell key={`cat-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="white" strokeWidth={2} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: unknown) => [`₪${value}`, '']}
+                    contentStyle={{
+                      backgroundColor: 'white',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                    }}
+                  />
+                  <Legend
+                    formatter={(value) => (
+                      <span className="text-sm text-slate-700 dark:text-slate-300">{value}</span>
+                    )}
+                    wrapperStyle={{ paddingTop: '20px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main data: items (what was purchased). Date is context. */}
       <div className="space-y-6">

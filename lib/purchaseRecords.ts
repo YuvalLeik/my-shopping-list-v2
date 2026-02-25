@@ -2,6 +2,10 @@ import { supabase } from './supabase';
 import { createGroceryList } from './groceryLists';
 import { upsertShoppingItemToCatalog } from './shoppingItems';
 
+function normalizeForMatch(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 export interface PurchaseItem {
   id: string;
   purchase_record_id: string;
@@ -271,6 +275,56 @@ export async function deletePurchaseRecord(recordId: string, userId: string): Pr
 
   if (error) {
     throw new Error(`Failed to delete purchase record: ${error.message}`);
+  }
+}
+
+/**
+ * After saving a receipt linked to a grocery list, match each purchase item
+ * to a grocery item in that list using canonical names from the matching step.
+ */
+export async function autoMatchPurchaseToGroceryItems(
+  purchaseRecordId: string,
+  groceryListId: string,
+  canonicalNames: string[]
+): Promise<void> {
+  try {
+    const { data: groceryItems } = await supabase
+      .from('grocery_items')
+      .select('id, name')
+      .eq('list_id', groceryListId);
+
+    if (!groceryItems?.length) return;
+
+    const { data: purchaseItems } = await supabase
+      .from('purchase_items')
+      .select('id, name')
+      .eq('purchase_record_id', purchaseRecordId)
+      .order('created_at', { ascending: true });
+
+    if (!purchaseItems?.length) return;
+
+    const groceryByNorm = new Map<string, string>();
+    for (const gi of groceryItems) {
+      groceryByNorm.set(normalizeForMatch(gi.name), gi.id);
+    }
+
+    for (let i = 0; i < purchaseItems.length; i++) {
+      const pi = purchaseItems[i];
+      const canonical = canonicalNames[i] || pi.name;
+
+      const groceryId =
+        groceryByNorm.get(normalizeForMatch(canonical)) ||
+        groceryByNorm.get(normalizeForMatch(pi.name));
+
+      if (groceryId) {
+        await supabase
+          .from('purchase_items')
+          .update({ matched_grocery_item_id: groceryId })
+          .eq('id', pi.id);
+      }
+    }
+  } catch {
+    // Non-critical
   }
 }
 

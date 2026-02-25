@@ -580,6 +580,367 @@ export async function getTotalSpending(userId: string): Promise<number> {
 // Re-export price library functions for dashboard use
 export { getAverageItemPrices, getItemPriceHistory, getStorePriceComparison, getSpendingByMonthFromPrices };
 
+// ---- List-Receipt Reconciliation ----
+
+export interface ReconciliationMatchedItem {
+  groceryItem: string;
+  purchaseItem: string;
+  quantity: number;
+  price: number | null;
+}
+
+export interface ReconciliationData {
+  listId: string;
+  listTitle: string;
+  listDate: string;
+  storeName: string | null;
+  totalPlannedItems: number;
+  totalPurchasedItems: number;
+  matched: ReconciliationMatchedItem[];
+  notPurchased: { name: string; quantity: number }[];
+  extras: { name: string; quantity: number; price: number | null }[];
+  fulfillmentRate: number;
+  totalSpent: number | null;
+}
+
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+export async function getListReconciliation(userId: string, listId: string): Promise<ReconciliationData | null> {
+  try {
+    const { data: list } = await supabase
+      .from('grocery_lists')
+      .select('id, title, completed_at')
+      .eq('id', listId)
+      .eq('local_user_id', userId)
+      .single();
+
+    if (!list) return null;
+
+    const { data: groceryItems } = await supabase
+      .from('grocery_items')
+      .select('id, name, quantity')
+      .eq('list_id', listId);
+
+    const { data: purchaseRecords } = await supabase
+      .from('purchase_records')
+      .select('id, store_name, total_amount')
+      .eq('grocery_list_id', listId)
+      .eq('local_user_id', userId);
+
+    if (!purchaseRecords?.length) {
+      const planned = groceryItems || [];
+      return {
+        listId,
+        listTitle: list.title,
+        listDate: list.completed_at || '',
+        storeName: null,
+        totalPlannedItems: planned.length,
+        totalPurchasedItems: 0,
+        matched: [],
+        notPurchased: planned.map(g => ({ name: g.name, quantity: g.quantity })),
+        extras: [],
+        fulfillmentRate: 0,
+        totalSpent: null,
+      };
+    }
+
+    const recordIds = purchaseRecords.map(r => r.id);
+    const { data: purchaseItems } = await supabase
+      .from('purchase_items')
+      .select('id, name, quantity, total_price, matched_grocery_item_id')
+      .in('purchase_record_id', recordIds);
+
+    const planned = groceryItems || [];
+    const purchased = purchaseItems || [];
+
+    const matchedGroceryIds = new Set<string>();
+    const matchedPurchaseIds = new Set<string>();
+    const matched: ReconciliationMatchedItem[] = [];
+
+    // Phase 1: Use matched_grocery_item_id FK
+    for (const pi of purchased) {
+      if (pi.matched_grocery_item_id) {
+        const gi = planned.find(g => g.id === pi.matched_grocery_item_id);
+        if (gi) {
+          matched.push({
+            groceryItem: gi.name,
+            purchaseItem: pi.name,
+            quantity: pi.quantity ?? 1,
+            price: pi.total_price ?? null,
+          });
+          matchedGroceryIds.add(gi.id);
+          matchedPurchaseIds.add(pi.id);
+        }
+      }
+    }
+
+    // Phase 2: Fallback name matching for unmatched items
+    for (const pi of purchased) {
+      if (matchedPurchaseIds.has(pi.id)) continue;
+      const piNorm = normalizeName(pi.name);
+      for (const gi of planned) {
+        if (matchedGroceryIds.has(gi.id)) continue;
+        if (normalizeName(gi.name) === piNorm) {
+          matched.push({
+            groceryItem: gi.name,
+            purchaseItem: pi.name,
+            quantity: pi.quantity ?? 1,
+            price: pi.total_price ?? null,
+          });
+          matchedGroceryIds.add(gi.id);
+          matchedPurchaseIds.add(pi.id);
+          break;
+        }
+      }
+    }
+
+    const notPurchased = planned
+      .filter(g => !matchedGroceryIds.has(g.id))
+      .map(g => ({ name: g.name, quantity: g.quantity }));
+
+    const extras = purchased
+      .filter(p => !matchedPurchaseIds.has(p.id))
+      .map(p => ({ name: p.name, quantity: p.quantity ?? 1, price: p.total_price ?? null }));
+
+    const fulfillmentRate = planned.length > 0
+      ? Math.round((matched.length / planned.length) * 100)
+      : 0;
+
+    const totalSpent = purchaseRecords.reduce(
+      (sum, r) => sum + (r.total_amount ?? 0), 0
+    ) || null;
+
+    return {
+      listId,
+      listTitle: list.title,
+      listDate: list.completed_at || '',
+      storeName: purchaseRecords[0]?.store_name || null,
+      totalPlannedItems: planned.length,
+      totalPurchasedItems: purchased.length,
+      matched,
+      notPurchased,
+      extras,
+      fulfillmentRate,
+      totalSpent,
+    };
+  } catch (error) {
+    console.error('Error getting list reconciliation:', error);
+    return null;
+  }
+}
+
+export interface PlannedVsActualStats {
+  totalReconciled: number;
+  avgFulfillmentRate: number;
+  avgExtrasPerTrip: number;
+  totalPlannedSpent: number | null;
+  totalActualSpent: number | null;
+}
+
+export async function getPlannedVsActualStats(userId: string): Promise<PlannedVsActualStats> {
+  try {
+    const { data: linkedRecords } = await supabase
+      .from('purchase_records')
+      .select('grocery_list_id')
+      .eq('local_user_id', userId)
+      .not('grocery_list_id', 'is', null);
+
+    if (!linkedRecords?.length) {
+      return { totalReconciled: 0, avgFulfillmentRate: 0, avgExtrasPerTrip: 0, totalPlannedSpent: null, totalActualSpent: null };
+    }
+
+    const listIds = [...new Set(linkedRecords.map(r => r.grocery_list_id!))];
+    let totalFulfillment = 0;
+    let totalExtras = 0;
+    let totalActual = 0;
+    let reconciled = 0;
+
+    for (const listId of listIds) {
+      const recon = await getListReconciliation(userId, listId);
+      if (!recon) continue;
+      reconciled++;
+      totalFulfillment += recon.fulfillmentRate;
+      totalExtras += recon.extras.length;
+      if (recon.totalSpent != null) totalActual += recon.totalSpent;
+    }
+
+    return {
+      totalReconciled: reconciled,
+      avgFulfillmentRate: reconciled > 0 ? Math.round(totalFulfillment / reconciled) : 0,
+      avgExtrasPerTrip: reconciled > 0 ? Math.round((totalExtras / reconciled) * 10) / 10 : 0,
+      totalPlannedSpent: null,
+      totalActualSpent: totalActual > 0 ? Math.round(totalActual * 100) / 100 : null,
+    };
+  } catch (error) {
+    console.error('Error getting planned vs actual stats:', error);
+    return { totalReconciled: 0, avgFulfillmentRate: 0, avgExtrasPerTrip: 0, totalPlannedSpent: null, totalActualSpent: null };
+  }
+}
+
+export interface StoreBasketComparison {
+  storeName: string;
+  totalSpent: number;
+  tripCount: number;
+  avgBasketCost: number;
+}
+
+export async function getStoreComparisonByBasket(userId: string): Promise<StoreBasketComparison[]> {
+  try {
+    const { data: records } = await supabase
+      .from('purchase_records')
+      .select('store_name, total_amount')
+      .eq('local_user_id', userId)
+      .not('store_name', 'is', null);
+
+    if (!records?.length) return [];
+
+    const storeMap = new Map<string, { totalSpent: number; tripCount: number }>();
+    for (const r of records) {
+      if (!r.store_name) continue;
+      const cur = storeMap.get(r.store_name) || { totalSpent: 0, tripCount: 0 };
+      cur.totalSpent += r.total_amount ?? 0;
+      cur.tripCount += 1;
+      storeMap.set(r.store_name, cur);
+    }
+
+    return Array.from(storeMap.entries())
+      .map(([storeName, { totalSpent, tripCount }]) => ({
+        storeName,
+        totalSpent: Math.round(totalSpent * 100) / 100,
+        tripCount,
+        avgBasketCost: tripCount > 0 ? Math.round((totalSpent / tripCount) * 100) / 100 : 0,
+      }))
+      .sort((a, b) => b.totalSpent - a.totalSpent);
+  } catch (error) {
+    console.error('Error getting store comparison by basket:', error);
+    return [];
+  }
+}
+
+export interface SpendingByCategory {
+  category: string;
+  totalSpent: number;
+  itemCount: number;
+}
+
+export async function getSpendingByCategory(userId: string): Promise<SpendingByCategory[]> {
+  try {
+    const { data: records } = await supabase
+      .from('purchase_records')
+      .select('id')
+      .eq('local_user_id', userId);
+
+    if (!records?.length) return [];
+
+    const recordIds = records.map(r => r.id);
+    const { data: purchaseItems } = await supabase
+      .from('purchase_items')
+      .select('name, total_price, matched_grocery_item_id')
+      .in('purchase_record_id', recordIds);
+
+    if (!purchaseItems?.length) return [];
+
+    // Get grocery items for category lookup
+    const matchedIds = purchaseItems
+      .filter(p => p.matched_grocery_item_id)
+      .map(p => p.matched_grocery_item_id!);
+
+    const categoryMap = new Map<string, { totalSpent: number; itemCount: number }>();
+
+    if (matchedIds.length > 0) {
+      const { data: groceryItems } = await supabase
+        .from('grocery_items')
+        .select('id, category')
+        .in('id', matchedIds);
+
+      const groceryCategoryMap = new Map<string, string>();
+      for (const gi of groceryItems || []) {
+        groceryCategoryMap.set(gi.id, gi.category || 'ללא קטגוריה');
+      }
+
+      for (const pi of purchaseItems) {
+        const cat = pi.matched_grocery_item_id
+          ? groceryCategoryMap.get(pi.matched_grocery_item_id) || 'ללא קטגוריה'
+          : 'ללא קטגוריה';
+        const cur = categoryMap.get(cat) || { totalSpent: 0, itemCount: 0 };
+        cur.totalSpent += pi.total_price ?? 0;
+        cur.itemCount += 1;
+        categoryMap.set(cat, cur);
+      }
+    } else {
+      for (const pi of purchaseItems) {
+        const cat = 'ללא קטגוריה';
+        const cur = categoryMap.get(cat) || { totalSpent: 0, itemCount: 0 };
+        cur.totalSpent += pi.total_price ?? 0;
+        cur.itemCount += 1;
+        categoryMap.set(cat, cur);
+      }
+    }
+
+    return Array.from(categoryMap.entries())
+      .map(([category, { totalSpent, itemCount }]) => ({
+        category,
+        totalSpent: Math.round(totalSpent * 100) / 100,
+        itemCount,
+      }))
+      .sort((a, b) => b.totalSpent - a.totalSpent);
+  } catch (error) {
+    console.error('Error getting spending by category:', error);
+    return [];
+  }
+}
+
+export interface RecentReconciliation {
+  listId: string;
+  listTitle: string;
+  listDate: string;
+  storeName: string | null;
+  fulfillmentRate: number;
+  matchedCount: number;
+  missedCount: number;
+  extrasCount: number;
+  totalSpent: number | null;
+}
+
+export async function getRecentReconciliations(userId: string, limit: number = 10): Promise<RecentReconciliation[]> {
+  try {
+    const { data: records } = await supabase
+      .from('purchase_records')
+      .select('grocery_list_id')
+      .eq('local_user_id', userId)
+      .not('grocery_list_id', 'is', null)
+      .order('created_at', { ascending: false });
+
+    if (!records?.length) return [];
+
+    const listIds = [...new Set(records.map(r => r.grocery_list_id!))].slice(0, limit);
+    const results: RecentReconciliation[] = [];
+
+    for (const listId of listIds) {
+      const recon = await getListReconciliation(userId, listId);
+      if (!recon) continue;
+      results.push({
+        listId: recon.listId,
+        listTitle: recon.listTitle,
+        listDate: recon.listDate,
+        storeName: recon.storeName,
+        fulfillmentRate: recon.fulfillmentRate,
+        matchedCount: recon.matched.length,
+        missedCount: recon.notPurchased.length,
+        extrasCount: recon.extras.length,
+        totalSpent: recon.totalSpent,
+      });
+    }
+
+    return results;
+  } catch (error) {
+    console.error('Error getting recent reconciliations:', error);
+    return [];
+  }
+}
+
 /**
  * Get all dashboard stats at once. All data is per-user and from completed lists (and purchased items) only.
  */
