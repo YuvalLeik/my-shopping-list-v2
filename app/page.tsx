@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ShoppingCart, Plus, Trash2, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, User, Menu, Receipt, Settings2 } from 'lucide-react';
+import { Loader2, ShoppingCart, Plus, Trash2, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, User, Menu, Receipt, Settings2, Ban, Undo2 } from 'lucide-react';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { Sidebar } from '@/components/Sidebar';
 import { AssistantPanel } from '@/app/components/AssistantPanel';
@@ -60,6 +60,7 @@ export default function Home() {
   const [completeListTotalCost, setCompleteListTotalCost] = useState('');
   const [completingListId, setCompletingListId] = useState<string | null>(null);
   const [purchasedItemsExpanded, setPurchasedItemsExpanded] = useState(false);
+  const [unavailableItemsExpanded, setUnavailableItemsExpanded] = useState(true);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   const [viewingPreviousListId, setViewingPreviousListId] = useState<string | null>(null);
   const [previousListMeta, setPreviousListMeta] = useState<GroceryList | null>(null);
@@ -810,7 +811,26 @@ export default function Home() {
     const itemId = item.id;
     setUpdatingItemId(itemId);
     try {
-      const updatedItem = await updateGroceryItem(itemId, { purchased: !item.purchased });
+      const updatedItem = await updateGroceryItem(itemId, { purchased: !item.purchased, unavailable: false });
+      setItems((prev) => [updatedItem, ...prev.filter(i => i.id !== updatedItem.id)]);
+    } catch (err) {
+      toast.error('נכשל בעדכון סטטוס הפריט', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
+  const handleToggleUnavailable = async (item: GroceryItem) => {
+    const itemId = item.id;
+    setUpdatingItemId(itemId);
+    try {
+      const newUnavailable = !item.unavailable;
+      const updatedItem = await updateGroceryItem(itemId, {
+        unavailable: newUnavailable,
+        purchased: false,
+      });
       setItems((prev) => [updatedItem, ...prev.filter(i => i.id !== updatedItem.id)]);
     } catch (err) {
       toast.error('נכשל בעדכון סטטוס הפריט', {
@@ -1564,8 +1584,9 @@ export default function Home() {
                         return normalizedName.includes(normalizedQuery);
                       });
                       
-                      // Separate items into not purchased and purchased
-                      const notPurchasedItems = filteredItems.filter(item => !item.purchased);
+                      // Separate items into not purchased, unavailable, and purchased
+                      const notPurchasedItems = filteredItems.filter(item => !item.purchased && !item.unavailable);
+                      const unavailableItems = filteredItems.filter(item => item.unavailable && !item.purchased);
                       const purchasedItems = filteredItems.filter(item => item.purchased);
                       
                       // Sort function for items by name (Hebrew alphabetical)
@@ -1602,6 +1623,7 @@ export default function Home() {
                       };
                       
                       const groupedNotPurchased = groupByCategory(notPurchasedItems);
+                      const groupedUnavailable = groupByCategory(unavailableItems);
                       const groupedPurchased = groupByCategory(purchasedItems);
                       
                       return (
@@ -1612,7 +1634,7 @@ export default function Home() {
                               🛒 רשימת הקניות שלי
                             </h1>
                             <div className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-                              {notPurchasedItems.length} פריטים חסרים · {purchasedItems.length} נאספו
+                              {notPurchasedItems.length} פריטים חסרים{unavailableItems.length > 0 ? ` · ${unavailableItems.length} לא קיים` : ''} · {purchasedItems.length} נאספו
                             </div>
                           </div>
                           
@@ -1702,7 +1724,7 @@ export default function Home() {
                             </Card>
                           )}
                           
-                          {!searchQuery.trim() && notPurchasedItems.length === 0 && purchasedItems.length > 0 && (
+                          {!searchQuery.trim() && notPurchasedItems.length === 0 && unavailableItems.length === 0 && purchasedItems.length > 0 && (
                             <Card className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
                               <CardContent className="text-center py-8 [dir=rtl]:text-right">
                                 <p className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
@@ -1829,6 +1851,16 @@ export default function Home() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
+                                        onClick={() => handleToggleUnavailable(item)}
+                                        disabled={updatingItemId === item.id}
+                                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 flex-shrink-0 h-7 w-7 sm:h-8 sm:w-auto p-0 sm:px-2"
+                                        title={t.markUnavailable}
+                                      >
+                                        <Ban className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
                                         onClick={() => handleDeleteItem(item.id)}
                                         disabled={deletingItemId === item.id || bulkDeleting}
                                         className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0 h-7 w-7 sm:h-8 sm:w-auto p-0 sm:px-2"
@@ -1947,6 +1979,16 @@ export default function Home() {
                                         <Button
                                           variant="ghost"
                                           size="sm"
+                                          onClick={() => handleToggleUnavailable(item)}
+                                          disabled={updatingItemId === item.id}
+                                          className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 flex-shrink-0 h-7 w-7 sm:h-8 sm:w-auto p-0 sm:px-2"
+                                          title={t.markUnavailable}
+                                        >
+                                          <Ban className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
                                           onClick={() => handleDeleteItem(item.id)}
                                           disabled={deletingItemId === item.id || bulkDeleting}
                                           className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0 h-7 w-7 sm:h-8 sm:w-auto p-0 sm:px-2"
@@ -1965,6 +2007,115 @@ export default function Home() {
                                   ))}
                                 </ul>
                               )}
+                            </div>
+                          )}
+
+                          {/* Unavailable items section */}
+                          {unavailableItems.length > 0 && (
+                            <div>
+                              <button
+                                onClick={() => setUnavailableItemsExpanded(!unavailableItemsExpanded)}
+                                className="w-full flex items-center justify-between p-3 mb-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors text-right [dir=rtl]:flex-row-reverse"
+                              >
+                                <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                                  🚫 {t.unavailableInStore} ({unavailableItems.length})
+                                </h3>
+                                <ChevronDown
+                                  className={`h-4 w-4 text-amber-500 dark:text-amber-400 transition-transform duration-200 ${
+                                    unavailableItemsExpanded ? 'rotate-180' : ''
+                                  }`}
+                                />
+                              </button>
+                              <div
+                                className={`overflow-hidden transition-all duration-300 ${
+                                  unavailableItemsExpanded ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
+                                }`}
+                              >
+                                {sortMode === 'category' ? (
+                                  Object.entries(groupedUnavailable).map(([category, categoryItems]) => (
+                                    <div key={category} className="mb-6">
+                                      <h4 className="text-xs font-medium text-amber-600 dark:text-amber-500 mb-2 text-right">
+                                        {category} ({categoryItems.length})
+                                      </h4>
+                                      <ul className="space-y-2 sm:space-y-3">
+                                        {categoryItems.map((item) => (
+                                          <li
+                                            key={item.id}
+                                            className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-4 border border-amber-200 dark:border-amber-800 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 transition-colors [dir=rtl]:flex-row-reverse"
+                                          >
+                                            <div className="w-10 h-10 sm:w-16 sm:h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden opacity-60">
+                                              {item.image_url ? (
+                                                <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                                              ) : (
+                                                <ShoppingCart className="h-4 w-4 sm:h-6 sm:w-6 text-slate-400" />
+                                              )}
+                                            </div>
+
+                                            <div className="flex-1 text-right min-w-0">
+                                              <div className="font-medium text-sm sm:text-base text-amber-700 dark:text-amber-300 truncate">
+                                                {item.name}
+                                              </div>
+                                              <div className="text-xs sm:text-sm text-amber-500 dark:text-amber-500 mt-0.5">
+                                                {item.category || 'ללא קטגוריה'} · כמות: {item.quantity}
+                                              </div>
+                                            </div>
+
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => handleToggleUnavailable(item)}
+                                              disabled={updatingItemId === item.id}
+                                              className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 flex-shrink-0 h-8 px-2"
+                                              title={t.markAvailable}
+                                            >
+                                              <Undo2 className="h-4 w-4 ml-1" />
+                                              <span className="text-xs hidden sm:inline">{t.markAvailable}</span>
+                                            </Button>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <ul className="space-y-2 sm:space-y-3">
+                                    {groupedUnavailable['כל הפריטים']?.map((item) => (
+                                      <li
+                                        key={item.id}
+                                        className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-4 border border-amber-200 dark:border-amber-800 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 transition-colors [dir=rtl]:flex-row-reverse"
+                                      >
+                                        <div className="w-10 h-10 sm:w-16 sm:h-16 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden opacity-60">
+                                          {item.image_url ? (
+                                            <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <ShoppingCart className="h-4 w-4 sm:h-6 sm:w-6 text-slate-400" />
+                                          )}
+                                        </div>
+
+                                        <div className="flex-1 text-right min-w-0">
+                                          <div className="font-medium text-sm sm:text-base text-amber-700 dark:text-amber-300 truncate">
+                                            {item.name}
+                                          </div>
+                                          <div className="text-xs sm:text-sm text-amber-500 dark:text-amber-500 mt-0.5">
+                                            {item.category || 'ללא קטגוריה'} · כמות: {item.quantity}
+                                          </div>
+                                        </div>
+
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleToggleUnavailable(item)}
+                                          disabled={updatingItemId === item.id}
+                                          className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 flex-shrink-0 h-8 px-2"
+                                          title={t.markAvailable}
+                                        >
+                                          <Undo2 className="h-4 w-4 ml-1" />
+                                          <span className="text-xs hidden sm:inline">{t.markAvailable}</span>
+                                        </Button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
                             </div>
                           )}
                           

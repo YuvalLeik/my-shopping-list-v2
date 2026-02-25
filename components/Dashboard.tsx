@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Loader2, ShoppingCart, ListChecks, TrendingUp, Search, X, DollarSign, CheckCircle2, XCircle, PlusCircle, Store, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, ShoppingCart, ListChecks, TrendingUp, Search, X, DollarSign, CheckCircle2, XCircle, PlusCircle, Store, ChevronDown, ChevronUp, Ban } from 'lucide-react';
 import {
   getDashboardStats, DashboardStats, getAllPurchasedItemNames, getItemMonthlyTrend, MonthlyTrend,
   getTopItemsBySpending, SpendingItem, getMonthlySpendingStats, MonthlySpendingPoint,
@@ -11,6 +11,7 @@ import {
   getListReconciliation, ReconciliationData,
   getStoreComparisonByBasket, StoreBasketComparison,
   getSpendingByCategory, SpendingByCategory,
+  getMissingItemsByStore, StoreMissingStats,
 } from '@/lib/analytics';
 import { t } from '@/lib/translations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -181,6 +182,7 @@ export function Dashboard({ userId }: DashboardProps) {
   // Store basket & category spending
   const [storeBaskets, setStoreBaskets] = useState<StoreBasketComparison[]>([]);
   const [spendingByCat, setSpendingByCat] = useState<SpendingByCategory[]>([]);
+  const [missingByStore, setMissingByStore] = useState<StoreMissingStats[]>([]);
 
   // Spending & price state
   const [totalSpending, setTotalSpending] = useState(0);
@@ -222,7 +224,7 @@ export function Dashboard({ userId }: DashboardProps) {
       }
       setLoading(true);
       try {
-        const [data, itemNames, spending, topSpend, monthSpend, pva, recons, baskets, catSpend] = await Promise.all([
+        const [data, itemNames, spending, topSpend, monthSpend, pva, recons, baskets, catSpend, missingStore] = await Promise.all([
           getDashboardStats(currentUserId),
           getAllPurchasedItemNames(currentUserId),
           getTotalSpending(currentUserId),
@@ -232,6 +234,7 @@ export function Dashboard({ userId }: DashboardProps) {
           getRecentReconciliations(currentUserId, 10),
           getStoreComparisonByBasket(currentUserId),
           getSpendingByCategory(currentUserId),
+          getMissingItemsByStore(currentUserId),
         ]);
         setStats(data);
         setAllItemNames(itemNames);
@@ -242,6 +245,7 @@ export function Dashboard({ userId }: DashboardProps) {
         setRecentRecons(recons);
         setStoreBaskets(baskets);
         setSpendingByCat(catSpend);
+        setMissingByStore(missingStore);
       } catch (error) {
         console.error('Failed to load dashboard stats:', error);
         setStats({
@@ -695,6 +699,68 @@ export function Dashboard({ userId }: DashboardProps) {
                   <Bar
                     dataKey="tripCount"
                     fill={CHART_COLORS.secondary}
+                    name={t.trips}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Missing Items by Store */}
+      {missingByStore.length > 0 && (
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Ban className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              {t.missingItemsByStore}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="h-[280px] sm:h-[320px] mt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={missingByStore}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis
+                    dataKey="storeName"
+                    tick={{ fill: '#374151', fontSize: 11, fontWeight: 500 }}
+                    axisLine={{ stroke: '#cbd5e1' }}
+                    tickLine={{ stroke: '#cbd5e1' }}
+                    interval={0}
+                    angle={-30}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis
+                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    axisLine={{ stroke: '#cbd5e1' }}
+                    tickLine={{ stroke: '#cbd5e1' }}
+                    allowDecimals={false}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend
+                    formatter={(value) => (
+                      <span className="text-sm text-slate-700 dark:text-slate-300">{value}</span>
+                    )}
+                  />
+                  <Bar
+                    dataKey="avgMissedPerTrip"
+                    fill={CHART_COLORS.warning}
+                    name={t.avgMissedPerTrip}
+                    radius={[4, 4, 0, 0]}
+                  >
+                    {missingByStore.map((_, index) => (
+                      <Cell key={`miss-${index}`} fill={index === 0 ? CHART_COLORS.danger : PIE_COLORS[(index + 3) % PIE_COLORS.length]} />
+                    ))}
+                  </Bar>
+                  <Bar
+                    dataKey="reconciledTrips"
+                    fill={CHART_COLORS.info}
                     name={t.trips}
                     radius={[4, 4, 0, 0]}
                   />

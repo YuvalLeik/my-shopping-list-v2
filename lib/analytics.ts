@@ -941,6 +941,62 @@ export async function getRecentReconciliations(userId: string, limit: number = 1
   }
 }
 
+// ---- Missing Items by Store ----
+
+export interface StoreMissingStats {
+  storeName: string;
+  totalMissedItems: number;
+  reconciledTrips: number;
+  avgMissedPerTrip: number;
+}
+
+/**
+ * Aggregates which stores had the most missing items from reconciled lists.
+ */
+export async function getMissingItemsByStore(userId: string): Promise<StoreMissingStats[]> {
+  try {
+    const { data: records } = await supabase
+      .from('purchase_records')
+      .select('grocery_list_id, store_name')
+      .eq('local_user_id', userId)
+      .not('grocery_list_id', 'is', null)
+      .not('store_name', 'is', null);
+
+    if (!records?.length) return [];
+
+    const storeMap = new Map<string, { totalMissed: number; trips: number }>();
+
+    const processedListIds = new Set<string>();
+
+    for (const rec of records) {
+      if (!rec.grocery_list_id || !rec.store_name) continue;
+      const key = `${rec.grocery_list_id}_${rec.store_name}`;
+      if (processedListIds.has(key)) continue;
+      processedListIds.add(key);
+
+      const recon = await getListReconciliation(userId, rec.grocery_list_id);
+      if (!recon) continue;
+
+      const cur = storeMap.get(rec.store_name) || { totalMissed: 0, trips: 0 };
+      cur.totalMissed += recon.notPurchased.length;
+      cur.trips += 1;
+      storeMap.set(rec.store_name, cur);
+    }
+
+    return Array.from(storeMap.entries())
+      .map(([storeName, { totalMissed, trips }]) => ({
+        storeName,
+        totalMissedItems: totalMissed,
+        reconciledTrips: trips,
+        avgMissedPerTrip: trips > 0 ? Math.round((totalMissed / trips) * 10) / 10 : 0,
+      }))
+      .sort((a, b) => b.avgMissedPerTrip - a.avgMissedPerTrip);
+  } catch (error) {
+    console.error('Error getting missing items by store:', error);
+    return [];
+  }
+}
+
 /**
  * Get all dashboard stats at once. All data is per-user and from completed lists (and purchased items) only.
  */

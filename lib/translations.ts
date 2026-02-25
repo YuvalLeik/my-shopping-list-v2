@@ -161,6 +161,16 @@ export const t = {
   editItem: 'ערוך',
   personalItemUpdated: 'הפריט עודכן בהצלחה',
 
+  // Unavailable items
+  unavailableInStore: 'לא קיים בסופר',
+  markUnavailable: 'סמן כלא קיים',
+  markAvailable: 'החזר לרשימה',
+
+  // Missing items by store dashboard
+  missingItemsByStore: 'פריטים חסרים לפי חנות',
+  avgMissedPerTrip: 'ממוצע חסרים לקנייה',
+  noMissingData: 'אין נתוני חוסרים',
+
   // Reconciliation & enhanced dashboard
   reconciliation: 'התאמת רשימה לקבלה',
   plannedVsActualSection: 'מתוכנן מול בפועל',
