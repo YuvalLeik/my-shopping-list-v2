@@ -87,6 +87,73 @@ export async function getItemPriceHistory(
 }
 
 /**
+ * Get average unit price for a single item across all stores/receipts.
+ */
+export async function getItemAveragePrice(
+  userId: string,
+  itemName: string
+): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('item_prices')
+    .select('unit_price')
+    .eq('local_user_id', userId)
+    .ilike('item_name', itemName.trim())
+    .not('unit_price', 'is', null);
+
+  if (error || !data || data.length === 0) return null;
+
+  let sum = 0;
+  let count = 0;
+  for (const row of data) {
+    const up = Number(row.unit_price);
+    if (up > 0) {
+      sum += up;
+      count++;
+    }
+  }
+
+  return count > 0 ? Math.round((sum / count) * 100) / 100 : null;
+}
+
+/**
+ * Get average unit prices for multiple items in one batch.
+ */
+export async function getItemAveragePrices(
+  userId: string,
+  itemNames: string[]
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (itemNames.length === 0) return result;
+
+  const { data, error } = await supabase
+    .from('item_prices')
+    .select('item_name, unit_price')
+    .eq('local_user_id', userId)
+    .not('unit_price', 'is', null);
+
+  if (error || !data) return result;
+
+  const map = new Map<string, { sum: number; count: number }>();
+  for (const row of data) {
+    const name = row.item_name.trim().toLowerCase();
+    const up = Number(row.unit_price);
+    if (up <= 0) continue;
+    const cur = map.get(name) || { sum: 0, count: 0 };
+    map.set(name, { sum: cur.sum + up, count: cur.count + 1 });
+  }
+
+  for (const requestedName of itemNames) {
+    const normalized = requestedName.trim().toLowerCase();
+    const entry = map.get(normalized);
+    if (entry && entry.count > 0) {
+      result.set(requestedName, Math.round((entry.sum / entry.count) * 100) / 100);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Get average unit price per item across all receipts.
  */
 export async function getAverageItemPrices(

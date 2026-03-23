@@ -12,6 +12,7 @@ import { GroceryList } from '@/lib/groceryLists';
 import { matchReceiptItems, upsertAlias, MatchedItem, getUserPersonalItems, PersonalItem } from '@/lib/itemAliases';
 import { recordPrices } from '@/lib/itemPrices';
 import { autoMatchPurchaseToGroceryItems } from '@/lib/purchaseRecords';
+import { uploadReceiptImage } from '@/lib/storage';
 
 interface ImportReceiptPanelProps {
   userId: string;
@@ -135,6 +136,16 @@ export function ImportReceiptPanel({
     setLoading(true);
     setSource(src);
     try {
+      // Upload receipt image to storage if it's a photo
+      if (src === 'photo_ocr' && file.type.startsWith('image/')) {
+        try {
+          const { publicUrl } = await uploadReceiptImage(file, userId);
+          setReceiptImageUrl(publicUrl);
+        } catch {
+          // Non-critical: continue with OCR even if upload fails
+        }
+      }
+
       const formData = new FormData();
       formData.append('file', file);
       formData.append('userId', userId);

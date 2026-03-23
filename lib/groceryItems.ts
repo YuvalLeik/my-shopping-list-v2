@@ -9,6 +9,7 @@ export interface GroceryItem {
   quantity: number;
   purchased?: boolean;
   unavailable?: boolean;
+  estimated_price?: number | null;
   image_url?: string | null;
   created_at: string;
 }
@@ -46,11 +47,15 @@ export async function createGroceryItem(
   name: string,
   quantity: number = 1,
   category: string = 'ללא קטגוריה',
-  image_url?: string | null
+  image_url?: string | null,
+  estimated_price?: number | null
 ): Promise<GroceryItem> {
-  const insertData: { list_id: string; name: string; quantity: number; category: string; image_url?: string | null } = { list_id: listId, name, quantity, category };
+  const insertData: { list_id: string; name: string; quantity: number; category: string; image_url?: string | null; estimated_price?: number | null } = { list_id: listId, name, quantity, category };
   if (image_url !== undefined) {
     insertData.image_url = image_url;
+  }
+  if (estimated_price != null) {
+    insertData.estimated_price = estimated_price;
   }
 
   const { data, error } = await supabase

@@ -178,6 +178,7 @@ export function Dashboard({ userId }: DashboardProps) {
   const [expandedReconId, setExpandedReconId] = useState<string | null>(null);
   const [expandedReconData, setExpandedReconData] = useState<ReconciliationData | null>(null);
   const [expandedReconLoading, setExpandedReconLoading] = useState(false);
+  const [reconsExpanded, setReconsExpanded] = useState(true);
 
   // Store basket & category spending
   const [storeBaskets, setStoreBaskets] = useState<StoreBasketComparison[]>([]);
@@ -364,7 +365,7 @@ export function Dashboard({ userId }: DashboardProps) {
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 mb-4">
           <ShoppingCart className="h-8 w-8 text-slate-400" />
         </div>
-        <p className="text-slate-600 dark:text-slate-400">יש להתחבר כדי לראות את ה-Dashboard</p>
+        <p className="text-slate-600 dark:text-slate-400">{t.dashboardLoginRequired}</p>
       </div>
     );
   }
@@ -373,7 +374,7 @@ export function Dashboard({ userId }: DashboardProps) {
     return (
       <div className="p-8 flex flex-col items-center justify-center gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-600 dark:text-indigo-400" />
-        <span className="text-slate-600 dark:text-slate-400">טוען נתונים...</span>
+        <span className="text-slate-600 dark:text-slate-400">{t.dashboardLoading}</span>
       </div>
     );
   }
@@ -381,7 +382,7 @@ export function Dashboard({ userId }: DashboardProps) {
   if (!stats) {
     return (
       <div className="p-8 text-center text-slate-600 dark:text-slate-400">
-        לא נמצאו נתונים
+        {t.dashboardNoData}
       </div>
     );
   }
@@ -389,14 +390,14 @@ export function Dashboard({ userId }: DashboardProps) {
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Total Purchased Items */}
         <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-900/30 dark:to-emerald-800/20 border-emerald-200/50 dark:border-emerald-700/50 shadow-sm hover:shadow-md transition-shadow">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">
-                  סה&quot;כ פריטים שנרכשו
+                  {t.totalPurchasedItems}
                 </p>
                 <p className="text-3xl font-bold text-emerald-900 dark:text-emerald-100">
                   {stats.totalPurchasedItems.toLocaleString()}
@@ -415,7 +416,7 @@ export function Dashboard({ userId }: DashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">
-                  סה&quot;כ רשימות שהושלמו
+                  {t.totalCompletedLists}
                 </p>
                 <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
                   {stats.totalCompletedLists.toLocaleString()}
@@ -434,7 +435,7 @@ export function Dashboard({ userId }: DashboardProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-purple-700 dark:text-purple-300 mb-1">
-                  ממוצע פריטים לרשימה
+                  {t.avgItemsPerList}
                 </p>
                 <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
                   {stats.avgItemsPerList}
@@ -452,7 +453,7 @@ export function Dashboard({ userId }: DashboardProps) {
       {plannedVsActual && plannedVsActual.totalReconciled > 0 && (
         <div className="space-y-4">
           <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t.plannedVsActualSection}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Fulfillment Rate */}
             <Card className="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-900/30 dark:to-green-800/20 border-green-200/50 dark:border-green-700/50 shadow-sm hover:shadow-md transition-shadow">
               <CardContent className="p-5">
@@ -528,11 +529,19 @@ export function Dashboard({ userId }: DashboardProps) {
       {recentRecons.length > 0 && (
         <Card className="shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              {t.recentReconciliations}
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                {t.recentReconciliations}
+              </CardTitle>
+              <button
+                onClick={() => setReconsExpanded(!reconsExpanded)}
+                className="sm:hidden p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500 dark:text-slate-400"
+              >
+                {reconsExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              </button>
+            </div>
           </CardHeader>
-          <CardContent className="pt-0 space-y-2">
+          <CardContent className={`pt-0 space-y-2 ${!reconsExpanded ? 'hidden sm:block' : ''}`}>
             {recentRecons.map((r) => (
               <div key={r.listId} className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                 <button
@@ -639,7 +648,7 @@ export function Dashboard({ userId }: DashboardProps) {
                         )}
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400 text-center py-2">לא נמצאו נתונים</p>
+                      <p className="text-xs text-slate-400 text-center py-2">{t.dashboardNoData}</p>
                     )}
                   </div>
                 )}
@@ -658,7 +667,7 @@ export function Dashboard({ userId }: DashboardProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="h-[280px] sm:h-[320px] mt-4">
+            <div className="h-[220px] sm:h-[320px] mt-4">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={storeBaskets}
@@ -719,7 +728,7 @@ export function Dashboard({ userId }: DashboardProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="h-[280px] sm:h-[320px] mt-4">
+            <div className="h-[220px] sm:h-[320px] mt-4">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={missingByStore}
@@ -780,7 +789,7 @@ export function Dashboard({ userId }: DashboardProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="h-[300px] sm:h-[350px] mt-4">
+            <div className="h-[240px] sm:h-[350px] mt-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -823,8 +832,8 @@ export function Dashboard({ userId }: DashboardProps) {
 
       {/* Main data: items (what was purchased). Date is context. */}
       <div className="space-y-6">
-        <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">נתוני הפריטים</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-400">כל הנתונים מבוססים על הפריטים שנרכשו ברשימות שהושלמו. התאריך משמש להצגת מגמות לאורך זמן.</p>
+        <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t.itemDataSection}</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400">{t.itemDataDescription}</p>
       </div>
 
       {/* Charts Grid - item-centric first */}
@@ -834,11 +843,11 @@ export function Dashboard({ userId }: DashboardProps) {
           <Card className="shadow-sm hover:shadow-md transition-shadow lg:col-span-2">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                10 המוצרים הנפוצים ביותר
+                {t.topTenItems}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="h-[300px] sm:h-[400px] mt-4">
+              <div className="h-[240px] sm:h-[400px] mt-4">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={stats.topItems}
@@ -867,7 +876,7 @@ export function Dashboard({ userId }: DashboardProps) {
                     <Bar 
                       dataKey="total_quantity" 
                       fill={CHART_COLORS.primary}
-                      name="כמות"
+                      name={t.quantity}
                       radius={[4, 4, 0, 0]}
                     >
                       {stats.topItems.map((entry, index) => (
@@ -889,11 +898,11 @@ export function Dashboard({ userId }: DashboardProps) {
           <Card className="shadow-sm hover:shadow-md transition-shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                התפלגות קטגוריות
+                {t.categoryDistribution}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="h-[300px] sm:h-[350px] mt-4">
+              <div className="h-[240px] sm:h-[350px] mt-4">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -945,7 +954,7 @@ export function Dashboard({ userId }: DashboardProps) {
           <CardHeader className="pb-2">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                מגמה חודשית לפי פריט
+                {t.monthlyItemTrend}
               </CardTitle>
               
               {/* Item Search */}
@@ -954,7 +963,7 @@ export function Dashboard({ userId }: DashboardProps) {
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
                     type="text"
-                    placeholder="חפש פריט..."
+                    placeholder={t.searchItem}
                     value={itemSearchQuery}
                     onChange={(e) => {
                       setItemSearchQuery(e.target.value);
@@ -1005,31 +1014,31 @@ export function Dashboard({ userId }: DashboardProps) {
             )}
             
             {!selectedItem ? (
-              <div className="h-[300px] sm:h-[350px] mt-4 flex items-center justify-center">
+              <div className="h-[240px] sm:h-[350px] mt-4 flex items-center justify-center">
                 <div className="text-center">
                   <Search className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
                   <p className="text-slate-500 dark:text-slate-400">
-                    בחר פריט מהרשימה לצפייה במגמה החודשית
+                    {t.selectItemToView}
                   </p>
                   <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
-                    {allItemNames.length} פריטים זמינים
+                    {allItemNames.length} {t.itemsAvailable}
                   </p>
                 </div>
               </div>
             ) : itemTrendLoading ? (
-              <div className="h-[300px] sm:h-[350px] mt-4 flex items-center justify-center">
+              <div className="h-[240px] sm:h-[350px] mt-4 flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-indigo-600 dark:text-indigo-400" />
               </div>
             ) : itemTrend.length === 0 ? (
-              <div className="h-[300px] sm:h-[350px] mt-4 flex items-center justify-center">
+              <div className="h-[240px] sm:h-[350px] mt-4 flex items-center justify-center">
                 <div className="text-center">
                   <p className="text-slate-500 dark:text-slate-400">
-                    אין נתונים עבור &quot;{selectedItem}&quot;
+                    {t.noDataForItem} &quot;{selectedItem}&quot;
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="h-[300px] sm:h-[350px] mt-4">
+              <div className="h-[240px] sm:h-[350px] mt-4">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart 
                     data={itemTrend}
@@ -1072,19 +1081,19 @@ export function Dashboard({ userId }: DashboardProps) {
       {/* Items over time - date as context for item data */}
       {(stats.completionTimelineByDay.length > 0 || stats.monthlyTrend.length > 0) && (
         <div className="space-y-6">
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">פריטים לאורך זמן</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">כמות הפריטים שנרכשו, לפי תאריך. התאריך עוזר לראות מתי רכשת.</p>
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t.itemsOverTime}</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">{t.itemsOverTimeDesc}</p>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Items by completion date - main item timeline */}
             {stats.completionTimelineByDay.length > 0 && (
               <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    כמות פריטים לפי תאריך השלמה
+                    {t.itemsByCompletionDate}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="h-[280px] sm:h-[320px] mt-4">
+                  <div className="h-[220px] sm:h-[320px] mt-4">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={stats.completionTimelineByDay}
@@ -1122,7 +1131,7 @@ export function Dashboard({ userId }: DashboardProps) {
                           dataKey="totalItems"
                           stroke={CHART_COLORS.secondary}
                           strokeWidth={2}
-                          name="פריטים"
+                          name={t.items}
                           dot={{ fill: CHART_COLORS.secondary, strokeWidth: 2, r: 4 }}
                           activeDot={{ r: 6 }}
                         />
@@ -1138,11 +1147,11 @@ export function Dashboard({ userId }: DashboardProps) {
               <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    כמות פריטים לפי חודש
+                    {t.itemsByMonth}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="h-[280px] sm:h-[320px] mt-4">
+                  <div className="h-[220px] sm:h-[320px] mt-4">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={stats.monthlyTrend}
@@ -1165,7 +1174,7 @@ export function Dashboard({ userId }: DashboardProps) {
                         <Bar
                           dataKey="total_items"
                           fill={CHART_COLORS.primary}
-                          name="פריטים"
+                          name={t.items}
                           radius={[4, 4, 0, 0]}
                         />
                       </BarChart>
@@ -1180,7 +1189,7 @@ export function Dashboard({ userId }: DashboardProps) {
               <Card className="shadow-sm hover:shadow-md transition-shadow lg:col-span-2">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    רשימות שהושלמו לפי תאריך (הקשר)
+                    {t.listsCompletedByDate}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
@@ -1221,7 +1230,7 @@ export function Dashboard({ userId }: DashboardProps) {
                         <Bar
                           dataKey="listCount"
                           fill={CHART_COLORS.info}
-                          name="מספר רשימות"
+                          name={t.listCount}
                           radius={[4, 4, 0, 0]}
                         />
                       </BarChart>
@@ -1268,7 +1277,7 @@ export function Dashboard({ userId }: DashboardProps) {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="h-[300px] sm:h-[350px] mt-4">
+                  <div className="h-[240px] sm:h-[350px] mt-4">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={topBySpending}
@@ -1317,7 +1326,7 @@ export function Dashboard({ userId }: DashboardProps) {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="h-[280px] sm:h-[320px] mt-4">
+                  <div className="h-[220px] sm:h-[320px] mt-4">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={monthlySpending}
@@ -1362,7 +1371,7 @@ export function Dashboard({ userId }: DashboardProps) {
                       <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                       <Input
                         type="text"
-                        placeholder="חפש פריט..."
+                        placeholder={t.searchItem}
                         value={priceSearchQuery}
                         onChange={(e) => {
                           setPriceSearchQuery(e.target.value);
@@ -1405,24 +1414,24 @@ export function Dashboard({ userId }: DashboardProps) {
                 )}
 
                 {!priceSelectedItem ? (
-                  <div className="h-[280px] sm:h-[320px] mt-4 flex items-center justify-center">
+                  <div className="h-[220px] sm:h-[320px] mt-4 flex items-center justify-center">
                     <div className="text-center">
                       <Search className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
                       <p className="text-slate-500 dark:text-slate-400">{t.selectItemForPrices}</p>
                     </div>
                   </div>
                 ) : priceLoading ? (
-                  <div className="h-[280px] sm:h-[320px] mt-4 flex items-center justify-center">
+                  <div className="h-[220px] sm:h-[320px] mt-4 flex items-center justify-center">
                     <Loader2 className="h-8 w-8 animate-spin text-amber-600 dark:text-amber-400" />
                   </div>
                 ) : priceHistory.length === 0 ? (
-                  <div className="h-[280px] sm:h-[320px] mt-4 flex items-center justify-center">
+                  <div className="h-[220px] sm:h-[320px] mt-4 flex items-center justify-center">
                     <p className="text-slate-500 dark:text-slate-400">
-                      אין נתוני מחירים עבור &quot;{priceSelectedItem}&quot;
+                      {t.noPriceDataFor} &quot;{priceSelectedItem}&quot;
                     </p>
                   </div>
                 ) : (
-                  <div className="h-[280px] sm:h-[320px] mt-4">
+                  <div className="h-[220px] sm:h-[320px] mt-4">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={priceHistory}
@@ -1516,10 +1525,10 @@ export function Dashboard({ userId }: DashboardProps) {
               <ShoppingCart className="h-8 w-8 text-slate-400" />
             </div>
             <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-2">
-              אין נתונים להצגה
+              {t.dashboardNoData}
             </h3>
             <p className="text-slate-600 dark:text-slate-400">
-              השלם רשימות כדי לראות סטטיסטיקות
+              {t.dashboardCompleteListsToSee}
             </p>
           </CardContent>
         </Card>

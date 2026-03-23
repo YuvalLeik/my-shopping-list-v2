@@ -31,3 +31,26 @@ export async function uploadItemImage(file: File, itemId: string, override: bool
     path,
   };
 }
+
+export async function uploadReceiptImage(file: File, userId: string): Promise<{ publicUrl: string; path: string }> {
+  const bucket = 'receipt-images';
+  const ext = file.name.split('.').pop() || 'jpg';
+  const fileName = `${crypto.randomUUID()}.${ext}`;
+  const path = `public/${userId}/${fileName}`;
+
+  const { error } = await supabase.storage.from(bucket).upload(path, file, {
+    contentType: file.type,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+
+  if (!data?.publicUrl) {
+    throw new Error('Failed to get public URL for uploaded receipt image');
+  }
+
+  return { publicUrl: data.publicUrl, path };
+}

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
 import { Dashboard } from '@/components/Dashboard';
 import { fetchLocalUsers, LocalUser } from '@/lib/localUsers';
+import { t } from '@/lib/translations';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -27,16 +28,14 @@ function DashboardContent() {
         if (userIdFromUrl && loadedUsers.find(u => u.id === userIdFromUrl)) {
           // Use userId from URL (from main page)
           setActiveUserId(userIdFromUrl);
-          localStorage.setItem('activeUserId', userIdFromUrl);
+          localStorage.setItem('active_user_id', userIdFromUrl);
         } else {
-          // Fallback to localStorage
-          const storedUserId = localStorage.getItem('activeUserId');
+          const storedUserId = localStorage.getItem('active_user_id');
           if (storedUserId && loadedUsers.find(u => u.id === storedUserId)) {
             setActiveUserId(storedUserId);
           } else if (loadedUsers.length > 0) {
-            // Default to first user if no stored user
             setActiveUserId(loadedUsers[0].id);
-            localStorage.setItem('activeUserId', loadedUsers[0].id);
+            localStorage.setItem('active_user_id', loadedUsers[0].id);
           }
         }
       } catch (error) {
@@ -65,7 +64,7 @@ function DashboardContent() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Dashboard</h1>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">לוח בקרה</h1>
               <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                 {activeUserId && users.find(u => u.id === activeUserId)?.name 
                   ? `משתמש: ${users.find(u => u.id === activeUserId)?.name}`
@@ -78,7 +77,7 @@ function DashboardContent() {
               className="flex items-center gap-2"
             >
               <ArrowRight className="h-4 w-4" />
-              חזור לרשימות קניות
+              {t.backToLists}
             </Button>
           </div>
         </div>
@@ -95,7 +94,7 @@ function DashboardContent() {
             </CardHeader>
             <CardContent>
               <p className="text-slate-600 dark:text-slate-400">
-                אנא בחר משתמש כדי לראות את ה-Dashboard
+                אנא בחר משתמש כדי לראות את לוח הבקרה
               </p>
             </CardContent>
           </Card>

@@ -26,14 +26,14 @@ function SettingsPageContent() {
 
         if (userIdFromUrl && loadedUsers.find(u => u.id === userIdFromUrl)) {
           setActiveUserId(userIdFromUrl);
-          localStorage.setItem('activeUserId', userIdFromUrl);
+          localStorage.setItem('active_user_id', userIdFromUrl);
         } else {
-          const storedUserId = localStorage.getItem('activeUserId');
+          const storedUserId = localStorage.getItem('active_user_id');
           if (storedUserId && loadedUsers.find(u => u.id === storedUserId)) {
             setActiveUserId(storedUserId);
           } else if (loadedUsers.length > 0) {
             setActiveUserId(loadedUsers[0].id);
-            localStorage.setItem('activeUserId', loadedUsers[0].id);
+            localStorage.setItem('active_user_id', loadedUsers[0].id);
           }
         }
       } catch (error) {
