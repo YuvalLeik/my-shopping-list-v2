@@ -47,7 +47,7 @@ export async function recordPrices(
       store_name: i.storeName ?? null,
       price: i.price,
       quantity: i.quantity ?? 1,
-      unit_price: i.unitPrice ?? (i.quantity && i.quantity > 0 ? Math.round((i.price / i.quantity) * 100) / 100 : i.price),
+      unit_price: i.quantity && i.quantity > 0 ? Math.round((i.price / i.quantity) * 100) / 100 : i.price,
       purchase_date: i.purchaseDate ?? null,
       purchase_record_id: i.purchaseRecordId ?? null,
     }));
@@ -87,36 +87,66 @@ export async function getItemPriceHistory(
 }
 
 /**
- * Get average unit price for a single item across all stores/receipts.
+ * Collect all name variants for an item: the canonical name itself
+ * plus any alias_name entries that map to it in item_aliases.
  */
-export async function getItemAveragePrice(
-  userId: string,
-  itemName: string
-): Promise<number | null> {
-  const { data, error } = await supabase
-    .from('item_prices')
-    .select('unit_price')
+async function getItemNameVariants(userId: string, itemName: string): Promise<string[]> {
+  const trimmed = itemName.trim();
+  const variants = [trimmed];
+
+  const { data } = await supabase
+    .from('item_aliases')
+    .select('alias_name')
     .eq('local_user_id', userId)
-    .ilike('item_name', itemName.trim())
-    .not('unit_price', 'is', null);
+    .ilike('canonical_name', trimmed);
 
-  if (error || !data || data.length === 0) return null;
+  if (data) {
+    for (const row of data) {
+      if (row.alias_name) variants.push(row.alias_name);
+    }
+  }
 
+  return variants;
+}
+
+function computeAvgFromRows(rows: { unit_price: number | null }[]): number | null {
   let sum = 0;
   let count = 0;
-  for (const row of data) {
+  for (const row of rows) {
     const up = Number(row.unit_price);
     if (up > 0) {
       sum += up;
       count++;
     }
   }
-
   return count > 0 ? Math.round((sum / count) * 100) / 100 : null;
 }
 
 /**
+ * Get average unit price for a single item across all stores/receipts.
+ * Searches by canonical name and all known aliases.
+ */
+export async function getItemAveragePrice(
+  userId: string,
+  itemName: string
+): Promise<number | null> {
+  const variants = await getItemNameVariants(userId, itemName);
+
+  const { data, error } = await supabase
+    .from('item_prices')
+    .select('unit_price')
+    .eq('local_user_id', userId)
+    .in('item_name', variants)
+    .not('unit_price', 'is', null);
+
+  if (error || !data || data.length === 0) return null;
+
+  return computeAvgFromRows(data);
+}
+
+/**
  * Get average unit prices for multiple items in one batch.
+ * Uses aliases to also match receipt names to canonical names.
  */
 export async function getItemAveragePrices(
   userId: string,
@@ -125,6 +155,21 @@ export async function getItemAveragePrices(
   const result = new Map<string, number>();
   if (itemNames.length === 0) return result;
 
+  // Fetch all aliases for this user to build a reverse mapping
+  const { data: aliasData } = await supabase
+    .from('item_aliases')
+    .select('canonical_name, alias_name')
+    .eq('local_user_id', userId);
+
+  // Build mapping: receipt name (lowercase) → canonical name (lowercase)
+  const aliasToCanonical = new Map<string, string>();
+  if (aliasData) {
+    for (const row of aliasData) {
+      aliasToCanonical.set(row.alias_name.trim().toLowerCase(), row.canonical_name.trim().toLowerCase());
+    }
+  }
+
+  // Fetch all price records
   const { data, error } = await supabase
     .from('item_prices')
     .select('item_name, unit_price')
@@ -133,13 +178,15 @@ export async function getItemAveragePrices(
 
   if (error || !data) return result;
 
+  // Aggregate prices, mapping receipt names to canonical names via aliases
   const map = new Map<string, { sum: number; count: number }>();
   for (const row of data) {
-    const name = row.item_name.trim().toLowerCase();
+    const rawName = row.item_name.trim().toLowerCase();
+    const canonicalName = aliasToCanonical.get(rawName) ?? rawName;
     const up = Number(row.unit_price);
     if (up <= 0) continue;
-    const cur = map.get(name) || { sum: 0, count: 0 };
-    map.set(name, { sum: cur.sum + up, count: cur.count + 1 });
+    const cur = map.get(canonicalName) || { sum: 0, count: 0 };
+    map.set(canonicalName, { sum: cur.sum + up, count: cur.count + 1 });
   }
 
   for (const requestedName of itemNames) {
