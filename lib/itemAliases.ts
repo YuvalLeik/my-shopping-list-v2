@@ -336,7 +336,9 @@ export async function getUnmatchedReceiptItems(userId: string): Promise<string[]
   const { data: purchaseItems, error: piErr } = await supabase
     .from('purchase_items')
     .select('name')
-    .in('purchase_record_id', recordIds);
+    .in('purchase_record_id', recordIds)
+    // Treat NULL as not ignored for backward compatibility
+    .or('ignored.eq.false,ignored.is.null');
 
   if (piErr || !purchaseItems) return [];
 
@@ -362,6 +364,48 @@ export async function getUnmatchedReceiptItems(userId: string): Promise<string[]
   }
 
   return Array.from(unmatchedSet).sort();
+}
+
+export async function dismissUnmatchedReceiptItem(userId: string, receiptItemName: string): Promise<void> {
+  const trimmed = receiptItemName.trim();
+  if (!trimmed) return;
+
+  const { data: records, error: recErr } = await supabase
+    .from('purchase_records')
+    .select('id')
+    .eq('local_user_id', userId);
+
+  if (recErr || !records?.length) return;
+
+  const recordIds = records.map(r => r.id);
+  const { error } = await supabase
+    .from('purchase_items')
+    .update({ ignored: true })
+    .in('purchase_record_id', recordIds)
+    .eq('name', trimmed);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function undoDismissUnmatchedReceiptItem(userId: string, receiptItemName: string): Promise<void> {
+  const trimmed = receiptItemName.trim();
+  if (!trimmed) return;
+
+  const { data: records, error: recErr } = await supabase
+    .from('purchase_records')
+    .select('id')
+    .eq('local_user_id', userId);
+
+  if (recErr || !records?.length) return;
+
+  const recordIds = records.map(r => r.id);
+  const { error } = await supabase
+    .from('purchase_items')
+    .update({ ignored: false })
+    .in('purchase_record_id', recordIds)
+    .eq('name', trimmed);
+
+  if (error) throw new Error(error.message);
 }
 
 /**

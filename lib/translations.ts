@@ -147,6 +147,10 @@ export const t = {
   settingsTypeReceiptName: 'הקלד שם כפי שמופיע בקבלה...',
   settingsUnmatchedItems: 'פריטים מקבלות ללא התאמה',
   settingsNoUnmatched: 'כל הפריטים מהקבלות מותאמים',
+  unmatchedDismiss: 'הסתר מהרשימה',
+  unmatchedUndo: 'החזר',
+  unmatchedDismissedToast: 'הפריט הוסתר מרשימת הבלתי-תואמים',
+  unmatchedUndoToast: 'הפריט הוחזר לרשימה',
   settingsPickItem: 'בחר את הפריט שלך:',
   settingsOriginalName: 'שם מקורי בקבלה:',
 

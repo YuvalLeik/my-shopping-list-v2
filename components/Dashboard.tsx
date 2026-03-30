@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { Loader2, ShoppingCart, ListChecks, TrendingUp, Search, X, DollarSign, CheckCircle2, XCircle, PlusCircle, Store, ChevronDown, ChevronUp, Ban } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import {
   getDashboardStats, DashboardStats, getAllPurchasedItemNames, getItemMonthlyTrend, MonthlyTrend,
   getTopItemsBySpending, SpendingItem, getMonthlySpendingStats, MonthlySpendingPoint,
@@ -97,7 +98,8 @@ const CustomTooltip = ({
 };
 
 // Custom pie chart label (Recharts may pass optional props)
-const renderCustomizedLabel = (props: {
+const renderCustomizedLabel = (
+  props: {
   cx?: number;
   cy?: number;
   midAngle?: number;
@@ -105,7 +107,9 @@ const renderCustomizedLabel = (props: {
   outerRadius?: number;
   percent?: number;
   category?: string;
-}) => {
+},
+  labelFill: string
+) => {
   const { cx = 0, cy = 0, midAngle = 0, innerRadius = 0, outerRadius = 0, percent = 0, category = '' } = props;
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
@@ -118,7 +122,7 @@ const renderCustomizedLabel = (props: {
     <text
       x={x}
       y={y}
-      fill="#374151"
+      fill={labelFill}
       textAnchor={x > cx ? 'start' : 'end'}
       dominantBaseline="central"
       className="text-xs font-medium"
@@ -128,7 +132,8 @@ const renderCustomizedLabel = (props: {
   );
 };
 
-const renderSpendingLabel = (props: {
+const renderSpendingLabel = (
+  props: {
   cx?: number;
   cy?: number;
   midAngle?: number;
@@ -137,7 +142,9 @@ const renderSpendingLabel = (props: {
   percent?: number;
   category?: string;
   totalSpent?: number;
-}) => {
+},
+  labelFill: string
+) => {
   const { cx = 0, cy = 0, midAngle = 0, innerRadius = 0, outerRadius = 0, percent = 0, category = '', totalSpent = 0 } = props;
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
@@ -150,7 +157,7 @@ const renderSpendingLabel = (props: {
     <text
       x={x}
       y={y}
-      fill="#374151"
+      fill={labelFill}
       textAnchor={x > cx ? 'start' : 'end'}
       dominantBaseline="central"
       className="text-xs font-medium"
@@ -163,6 +170,17 @@ const renderSpendingLabel = (props: {
 export function Dashboard({ userId }: DashboardProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
+  // Recharts SVG tick/label colors are not affected by Tailwind's `dark:` classes,
+  // so we set them explicitly based on the active theme.
+  const chartTickPrimary = isDark ? '#e2e8f0' : '#374151';
+  const chartTickSecondary = isDark ? '#94a3b8' : '#64748b';
+  const chartAxisLine = isDark ? '#334155' : '#cbd5e1';
+  const chartGridStroke = isDark ? '#334155' : '#e2e8f0';
+  const chartLabelFill = chartTickPrimary;
   
   // Item trend state
   const [allItemNames, setAllItemNames] = useState<string[]>([]);
@@ -673,21 +691,21 @@ export function Dashboard({ userId }: DashboardProps) {
                   data={storeBaskets}
                   margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} vertical={false} />
                   <XAxis
                     dataKey="storeName"
-                    tick={{ fill: '#374151', fontSize: 11, fontWeight: 500 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={{ stroke: '#cbd5e1' }}
+                    tick={{ fill: chartTickPrimary, fontSize: 11, fontWeight: 500 }}
+                    axisLine={{ stroke: chartAxisLine }}
+                    tickLine={{ stroke: chartAxisLine }}
                     interval={0}
                     angle={-30}
                     textAnchor="end"
                     height={60}
                   />
                   <YAxis
-                    tick={{ fill: '#64748b', fontSize: 12 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={{ stroke: '#cbd5e1' }}
+                    tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                    axisLine={{ stroke: chartAxisLine }}
+                    tickLine={{ stroke: chartAxisLine }}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend
@@ -734,21 +752,21 @@ export function Dashboard({ userId }: DashboardProps) {
                   data={missingByStore}
                   margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} vertical={false} />
                   <XAxis
                     dataKey="storeName"
-                    tick={{ fill: '#374151', fontSize: 11, fontWeight: 500 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={{ stroke: '#cbd5e1' }}
+                    tick={{ fill: chartTickPrimary, fontSize: 11, fontWeight: 500 }}
+                    axisLine={{ stroke: chartAxisLine }}
+                    tickLine={{ stroke: chartAxisLine }}
                     interval={0}
                     angle={-30}
                     textAnchor="end"
                     height={60}
                   />
                   <YAxis
-                    tick={{ fill: '#64748b', fontSize: 12 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={{ stroke: '#cbd5e1' }}
+                    tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                    axisLine={{ stroke: chartAxisLine }}
+                    tickLine={{ stroke: chartAxisLine }}
                     allowDecimals={false}
                   />
                   <Tooltip content={<CustomTooltip />} />
@@ -797,7 +815,7 @@ export function Dashboard({ userId }: DashboardProps) {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={renderSpendingLabel as (props: unknown) => React.ReactNode}
+                    label={(props: unknown) => renderSpendingLabel(props as any, chartLabelFill)}
                     outerRadius="70%"
                     innerRadius="40%"
                     dataKey="totalSpent"
@@ -853,13 +871,13 @@ export function Dashboard({ userId }: DashboardProps) {
                     data={stats.topItems}
                     margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} vertical={false} />
                     <XAxis 
                       dataKey="name"
                       type="category"
-                      tick={{ fill: '#374151', fontSize: 11, fontWeight: 500 }}
-                      axisLine={{ stroke: '#cbd5e1' }}
-                      tickLine={{ stroke: '#cbd5e1' }}
+                      tick={{ fill: chartTickPrimary, fontSize: 11, fontWeight: 500 }}
+                      axisLine={{ stroke: chartAxisLine }}
+                      tickLine={{ stroke: chartAxisLine }}
                       interval={0}
                       angle={-45}
                       textAnchor="end"
@@ -867,9 +885,9 @@ export function Dashboard({ userId }: DashboardProps) {
                     />
                     <YAxis 
                       type="number"
-                      tick={{ fill: '#64748b', fontSize: 12 }}
-                      axisLine={{ stroke: '#cbd5e1' }}
-                      tickLine={{ stroke: '#cbd5e1' }}
+                      tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                      axisLine={{ stroke: chartAxisLine }}
+                      tickLine={{ stroke: chartAxisLine }}
                       allowDecimals={false}
                     />
                     <Tooltip content={<CustomTooltip />} />
@@ -910,7 +928,7 @@ export function Dashboard({ userId }: DashboardProps) {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={renderCustomizedLabel as (props: unknown) => React.ReactNode}
+                      label={(props: unknown) => renderCustomizedLabel(props as any, chartLabelFill)}
                       outerRadius="70%"
                       innerRadius="40%"
                       fill="#8884d8"
@@ -1044,15 +1062,15 @@ export function Dashboard({ userId }: DashboardProps) {
                     data={itemTrend}
                     margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} />
                     <XAxis 
                       dataKey="month" 
-                      tick={{ fill: '#64748b', fontSize: 12 }}
-                      axisLine={{ stroke: '#cbd5e1' }}
+                      tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                      axisLine={{ stroke: chartAxisLine }}
                     />
                     <YAxis 
-                      tick={{ fill: '#64748b', fontSize: 12 }}
-                      axisLine={{ stroke: '#cbd5e1' }}
+                      tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                      axisLine={{ stroke: chartAxisLine }}
                       allowDecimals={false}
                     />
                     <Tooltip content={<CustomTooltip />} />
@@ -1099,24 +1117,24 @@ export function Dashboard({ userId }: DashboardProps) {
                         data={stats.completionTimelineByDay}
                         margin={{ top: 10, right: 20, left: 10, bottom: 60 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} />
                         <XAxis
                           dataKey="date"
                           tickFormatter={(value) => {
                             const parts = value.split('-');
                             return parts.length === 3 ? `${parts[2]}/${parts[1]}` : value;
                           }}
-                          tick={{ fill: '#64748b', fontSize: 11 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 11 }}
+                          axisLine={{ stroke: chartAxisLine }}
+                          tickLine={{ stroke: chartAxisLine }}
                           angle={-45}
                           textAnchor="end"
                           height={60}
                         />
                         <YAxis
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                          axisLine={{ stroke: chartAxisLine }}
+                          tickLine={{ stroke: chartAxisLine }}
                           allowDecimals={false}
                         />
                         <Tooltip
@@ -1157,17 +1175,17 @@ export function Dashboard({ userId }: DashboardProps) {
                         data={stats.monthlyTrend}
                         margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} vertical={false} />
                         <XAxis
                           dataKey="month"
-                          tick={{ fill: '#64748b', fontSize: 11 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 11 }}
+                          axisLine={{ stroke: chartAxisLine }}
+                          tickLine={{ stroke: chartAxisLine }}
                         />
                         <YAxis
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                          axisLine={{ stroke: chartAxisLine }}
+                          tickLine={{ stroke: chartAxisLine }}
                           allowDecimals={false}
                         />
                         <Tooltip content={<CustomTooltip />} />
@@ -1199,25 +1217,25 @@ export function Dashboard({ userId }: DashboardProps) {
                         data={stats.completionTimelineByDay}
                         margin={{ top: 10, right: 20, left: 10, bottom: 60 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} vertical={false} />
                         <XAxis
                           dataKey="date"
                           tickFormatter={(value) => {
                             const parts = value.split('-');
                             return parts.length === 3 ? `${parts[2]}/${parts[1]}` : value;
                           }}
-                          tick={{ fill: '#64748b', fontSize: 11 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 11 }}
+                          axisLine={{ stroke: chartAxisLine }}
+                          tickLine={{ stroke: chartAxisLine }}
                           angle={-45}
                           textAnchor="end"
                           height={60}
                         />
                         <YAxis
                           type="number"
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                          axisLine={{ stroke: chartAxisLine }}
+                          tickLine={{ stroke: chartAxisLine }}
                           allowDecimals={false}
                         />
                         <Tooltip
@@ -1283,21 +1301,21 @@ export function Dashboard({ userId }: DashboardProps) {
                         data={topBySpending}
                         margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} vertical={false} />
                         <XAxis
                           dataKey="itemName"
-                          tick={{ fill: '#374151', fontSize: 11, fontWeight: 500 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickPrimary, fontSize: 11, fontWeight: 500 }}
+                          axisLine={{ stroke: chartAxisLine }}
+                          tickLine={{ stroke: chartAxisLine }}
                           interval={0}
                           angle={-45}
                           textAnchor="end"
                           height={80}
                         />
                         <YAxis
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
-                          tickLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                          axisLine={{ stroke: chartAxisLine }}
+                          tickLine={{ stroke: chartAxisLine }}
                         />
                         <Tooltip content={<CustomTooltip />} />
                         <Bar
@@ -1332,15 +1350,15 @@ export function Dashboard({ userId }: DashboardProps) {
                         data={monthlySpending}
                         margin={{ top: 10, right: 20, left: 10, bottom: 5 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} />
                         <XAxis
                           dataKey="month"
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                          axisLine={{ stroke: chartAxisLine }}
                         />
                         <YAxis
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                          axisLine={{ stroke: chartAxisLine }}
                         />
                         <Tooltip content={<CustomTooltip />} />
                         <Line
@@ -1437,22 +1455,22 @@ export function Dashboard({ userId }: DashboardProps) {
                         data={priceHistory}
                         margin={{ top: 5, right: 20, left: 10, bottom: 40 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} />
                         <XAxis
                           dataKey="date"
                           tickFormatter={(value) => {
                             const parts = String(value).split('-');
                             return parts.length === 3 ? `${parts[2]}/${parts[1]}` : value;
                           }}
-                          tick={{ fill: '#64748b', fontSize: 11 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 11 }}
+                          axisLine={{ stroke: chartAxisLine }}
                           angle={-45}
                           textAnchor="end"
                           height={40}
                         />
                         <YAxis
-                          tick={{ fill: '#64748b', fontSize: 12 }}
-                          axisLine={{ stroke: '#cbd5e1' }}
+                          tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                          axisLine={{ stroke: chartAxisLine }}
                         />
                         <Tooltip
                           content={<CustomTooltip />}
@@ -1486,18 +1504,18 @@ export function Dashboard({ userId }: DashboardProps) {
                           data={storeComparison}
                           margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                          <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke} vertical={false} />
                           <XAxis
                             dataKey="storeName"
-                            tick={{ fill: '#64748b', fontSize: 11 }}
-                            axisLine={{ stroke: '#cbd5e1' }}
+                            tick={{ fill: chartTickSecondary, fontSize: 11 }}
+                            axisLine={{ stroke: chartAxisLine }}
                             angle={-30}
                             textAnchor="end"
                             height={40}
                           />
                           <YAxis
-                            tick={{ fill: '#64748b', fontSize: 12 }}
-                            axisLine={{ stroke: '#cbd5e1' }}
+                            tick={{ fill: chartTickSecondary, fontSize: 12 }}
+                            axisLine={{ stroke: chartAxisLine }}
                           />
                           <Tooltip content={<CustomTooltip />} />
                           <Bar

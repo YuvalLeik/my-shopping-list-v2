@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { t } from '@/lib/translations';
-import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, getUnmatchedReceiptItems, addUserCatalogItem, deleteUserCatalogItem, updateUserCatalogItemImage, updatePersonalItemDetails, ItemAlias, PersonalItem } from '@/lib/itemAliases';
+import { fetchAllAliases, deleteAlias, upsertAlias, getUserPersonalItems, getUnmatchedReceiptItems, dismissUnmatchedReceiptItem, undoDismissUnmatchedReceiptItem, addUserCatalogItem, deleteUserCatalogItem, updateUserCatalogItemImage, updatePersonalItemDetails, ItemAlias, PersonalItem } from '@/lib/itemAliases';
 import { uploadItemImage } from '@/lib/storage';
 import { toast } from 'sonner';
 import { CATEGORIES } from '@/lib/categories';
@@ -39,6 +39,7 @@ export function SettingsContent({ userId }: SettingsContentProps) {
   // Unmatched item attach: which unmatched item is being matched
   const [matchingUnmatched, setMatchingUnmatched] = useState<string | null>(null);
   const [unmatchedSearch, setUnmatchedSearch] = useState('');
+  const [dismissingUnmatched, setDismissingUnmatched] = useState<string | null>(null);
 
   // Add personal item form
   const [showAddItemForm, setShowAddItemForm] = useState(false);
@@ -103,6 +104,41 @@ export function SettingsContent({ userId }: SettingsContentProps) {
     loadPersonalItems();
     loadUnmatched();
   }, [loadAliases, loadPersonalItems, loadUnmatched]);
+
+  const handleDismissUnmatched = async (receiptName: string) => {
+    setDismissingUnmatched(receiptName);
+    try {
+      await dismissUnmatchedReceiptItem(userId, receiptName);
+      // Close any open attach UI for this receipt item
+      setMatchingUnmatched(null);
+      setUnmatchedSearch('');
+      await loadUnmatched();
+
+      toast.success(t.unmatchedDismissedToast, {
+        description: receiptName,
+        duration: 5000,
+        action: {
+          label: t.unmatchedUndo,
+          onClick: (event) => {
+            event.preventDefault();
+            void (async () => {
+              try {
+                await undoDismissUnmatchedReceiptItem(userId, receiptName);
+                await loadUnmatched();
+                toast.success(t.unmatchedUndoToast);
+              } catch {
+                toast.error(t.failedToDeleteItem);
+              }
+            })();
+          },
+        },
+      });
+    } catch {
+      toast.error(t.failedToDeleteItem);
+    } finally {
+      setDismissingUnmatched(null);
+    }
+  };
 
   const handleDeleteAlias = async (id: string) => {
     try {
@@ -361,25 +397,37 @@ export function SettingsContent({ userId }: SettingsContentProps) {
                     >
                       <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
                         <span className="text-sm text-slate-700 dark:text-slate-300">{receiptName}</span>
-                        {matchingUnmatched === receiptName ? (
+                        <div className="flex items-center gap-2">
+                          {matchingUnmatched === receiptName ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { setMatchingUnmatched(null); setUnmatchedSearch(''); }}
+                              className="h-9 w-9 p-0"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setMatchingUnmatched(receiptName); setUnmatchedSearch(''); }}
+                              className="h-9 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50"
+                            >
+                              {t.attachItem}
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => { setMatchingUnmatched(null); setUnmatchedSearch(''); }}
-                            className="h-9 w-9 p-0"
+                            onClick={() => handleDismissUnmatched(receiptName)}
+                            disabled={dismissingUnmatched === receiptName}
+                            className="h-9 w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
+                            title={t.unmatchedDismiss}
                           >
-                            <X className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => { setMatchingUnmatched(receiptName); setUnmatchedSearch(''); }}
-                            className="h-9 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50"
-                          >
-                            {t.attachItem}
-                          </Button>
-                        )}
+                        </div>
                       </div>
 
                       {matchingUnmatched === receiptName && (
