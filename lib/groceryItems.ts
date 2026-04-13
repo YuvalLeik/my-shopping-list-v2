@@ -115,7 +115,7 @@ export async function deleteGroceryItem(itemId: string): Promise<void> {
 
 export async function updateGroceryItem(
   itemId: string,
-  updates: { quantity?: number; purchased?: boolean; unavailable?: boolean; image_url?: string | null }
+  updates: { quantity?: number; purchased?: boolean; unavailable?: boolean; image_url?: string | null; estimated_price?: number | null }
 ): Promise<GroceryItem> {
   const { data, error } = await supabase
     .from('grocery_items')
