@@ -3,6 +3,51 @@ import { getSpendingByMonth as getSpendingByMonthFromPrices, getAverageItemPrice
 
 export type { PricePoint, StorePriceComparison, MonthlySpending };
 
+/**
+ * Batch-fetch categories from the global shopping_items catalog for a list of item names.
+ * Returns a map of lowercased item name → category string (non-empty).
+ */
+async function batchGetCategoriesFromCatalog(names: string[]): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (names.length === 0) return result;
+
+  const uniqueNames = [...new Set(names.map(n => n.trim()))].filter(Boolean);
+  if (uniqueNames.length === 0) return result;
+
+  try {
+    const { data } = await supabase
+      .from('shopping_items')
+      .select('name, category')
+      .in('name', uniqueNames);
+
+    for (const row of data || []) {
+      if (row.name && row.category) {
+        result.set(row.name.trim().toLowerCase(), row.category);
+      }
+    }
+
+    // Also try case-insensitive fallback for names not found above
+    const notFound = uniqueNames.filter(n => !result.has(n.toLowerCase()));
+    if (notFound.length > 0) {
+      for (const name of notFound) {
+        const { data: fuzzy } = await supabase
+          .from('shopping_items')
+          .select('name, category')
+          .ilike('name', name)
+          .limit(1)
+          .maybeSingle();
+        if (fuzzy?.category) {
+          result.set(name.toLowerCase(), fuzzy.category);
+        }
+      }
+    }
+  } catch {
+    // Non-critical — fall back to "ללא קטגוריה"
+  }
+
+  return result;
+}
+
 export interface TopItem {
   name: string;
   total_quantity: number;
@@ -159,7 +204,9 @@ export async function getTotalCompletedLists(userId: string): Promise<number> {
 }
 
 /**
- * Get category distribution (completed lists + standalone as "ללא קטגוריה")
+ * Get category distribution (completed lists + standalone purchases).
+ * Items without a category are looked up in the global catalog before
+ * falling back to "ללא קטגוריה".
  */
 export async function getCategoryDistribution(userId: string): Promise<CategoryDistribution[]> {
   try {
@@ -175,12 +222,21 @@ export async function getCategoryDistribution(userId: string): Promise<CategoryD
       const listIds = completedLists.map(list => list.id);
       const { data: items } = await supabase
         .from('grocery_items')
-        .select('category, quantity')
+        .select('name, category, quantity')
         .in('list_id', listIds)
         .eq('purchased', true);
 
+      // Batch-lookup catalog categories for items missing a category
+      const uncategorizedNames = (items || [])
+        .filter(i => !i.category)
+        .map(i => i.name);
+      const catalogCategories = await batchGetCategoriesFromCatalog(uncategorizedNames);
+
       for (const item of items || []) {
-        const category = item.category || 'ללא קטגוריה';
+        const category =
+          item.category ||
+          catalogCategories.get(item.name?.trim().toLowerCase()) ||
+          'ללא קטגוריה';
         const current = categoryMap.get(category) || { count: 0, total_quantity: 0 };
         categoryMap.set(category, {
           count: current.count + 1,
@@ -189,9 +245,15 @@ export async function getCategoryDistribution(userId: string): Promise<CategoryD
       }
     }
 
+    // Standalone purchase items — try catalog before falling back
     const standaloneItems = await getStandalonePurchaseItems(userId);
+    const standaloneNames = standaloneItems.map(i => i.name);
+    const standaloneCatalogCats = await batchGetCategoriesFromCatalog(standaloneNames);
+
     for (const item of standaloneItems) {
-      const category = 'ללא קטגוריה';
+      const category =
+        standaloneCatalogCats.get(item.name?.trim().toLowerCase()) ||
+        'ללא קטגוריה';
       const current = categoryMap.get(category) || { count: 0, total_quantity: 0 };
       categoryMap.set(category, {
         count: current.count + 1,
@@ -842,41 +904,56 @@ export async function getSpendingByCategory(userId: string): Promise<SpendingByC
 
     if (!purchaseItems?.length) return [];
 
-    // Get grocery items for category lookup
+    // Build category map from matched grocery items
     const matchedIds = purchaseItems
       .filter(p => p.matched_grocery_item_id)
       .map(p => p.matched_grocery_item_id!);
 
-    const categoryMap = new Map<string, { totalSpent: number; itemCount: number }>();
+    const groceryCategoryMap = new Map<string, string>(); // grocery_item_id → category
 
     if (matchedIds.length > 0) {
       const { data: groceryItems } = await supabase
         .from('grocery_items')
-        .select('id, category')
+        .select('id, name, category')
         .in('id', matchedIds);
 
-      const groceryCategoryMap = new Map<string, string>();
+      // Collect grocery items that have no category so we can batch-lookup from catalog
+      const groceryItemsNeedingCatalog = (groceryItems || []).filter(gi => !gi.category);
+      const catalogCats = await batchGetCategoriesFromCatalog(
+        groceryItemsNeedingCatalog.map(gi => gi.name)
+      );
+
       for (const gi of groceryItems || []) {
-        groceryCategoryMap.set(gi.id, gi.category || 'ללא קטגוריה');
+        const cat =
+          gi.category ||
+          catalogCats.get(gi.name?.trim().toLowerCase()) ||
+          null; // null means we still don't know
+        if (cat) groceryCategoryMap.set(gi.id, cat);
+      }
+    }
+
+    // Collect all purchase item names without a resolved category (for catalog fallback)
+    const unmatchedNames = purchaseItems
+      .filter(pi => !pi.matched_grocery_item_id || !groceryCategoryMap.has(pi.matched_grocery_item_id))
+      .map(pi => pi.name);
+    const unmatchedCatalogCats = await batchGetCategoriesFromCatalog(unmatchedNames);
+
+    const categoryMap = new Map<string, { totalSpent: number; itemCount: number }>();
+
+    for (const pi of purchaseItems) {
+      let cat: string;
+      if (pi.matched_grocery_item_id && groceryCategoryMap.has(pi.matched_grocery_item_id)) {
+        cat = groceryCategoryMap.get(pi.matched_grocery_item_id)!;
+      } else {
+        cat =
+          unmatchedCatalogCats.get(pi.name?.trim().toLowerCase()) ||
+          'ללא קטגוריה';
       }
 
-      for (const pi of purchaseItems) {
-        const cat = pi.matched_grocery_item_id
-          ? groceryCategoryMap.get(pi.matched_grocery_item_id) || 'ללא קטגוריה'
-          : 'ללא קטגוריה';
-        const cur = categoryMap.get(cat) || { totalSpent: 0, itemCount: 0 };
-        cur.totalSpent += pi.total_price ?? 0;
-        cur.itemCount += 1;
-        categoryMap.set(cat, cur);
-      }
-    } else {
-      for (const pi of purchaseItems) {
-        const cat = 'ללא קטגוריה';
-        const cur = categoryMap.get(cat) || { totalSpent: 0, itemCount: 0 };
-        cur.totalSpent += pi.total_price ?? 0;
-        cur.itemCount += 1;
-        categoryMap.set(cat, cur);
-      }
+      const cur = categoryMap.get(cat) || { totalSpent: 0, itemCount: 0 };
+      cur.totalSpent += pi.total_price ?? 0;
+      cur.itemCount += 1;
+      categoryMap.set(cat, cur);
     }
 
     return Array.from(categoryMap.entries())

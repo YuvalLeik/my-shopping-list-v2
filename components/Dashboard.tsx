@@ -799,54 +799,78 @@ export function Dashboard({ userId }: DashboardProps) {
       )}
 
       {/* Spending by Category */}
-      {spendingByCat.length > 0 && (
-        <Card className="shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              {t.spendingByCategory}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="h-[240px] sm:h-[350px] mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={spendingByCat}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={(props: unknown) => renderSpendingLabel(props as any, chartLabelFill)}
-                    outerRadius="70%"
-                    innerRadius="40%"
-                    dataKey="totalSpent"
-                    nameKey="category"
-                    paddingAngle={2}
-                  >
-                    {spendingByCat.map((_, index) => (
-                      <Cell key={`cat-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="white" strokeWidth={2} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: unknown) => [`₪${value}`, '']}
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                    }}
-                  />
-                  <Legend
-                    formatter={(value) => (
-                      <span className="text-sm text-slate-700 dark:text-slate-300">{value}</span>
-                    )}
-                    wrapperStyle={{ paddingTop: '20px' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {spendingByCat.length > 0 && (() => {
+        const NO_CAT = 'ללא קטגוריה';
+        const categorized = spendingByCat.filter(c => c.category !== NO_CAT);
+        const uncategorizedEntry = spendingByCat.find(c => c.category === NO_CAT);
+        // Show pie only when there are real categories; fall back to showing "ללא קטגוריה" if it's the only data
+        const pieData = categorized.length >= 2 ? categorized : spendingByCat;
+        const hiddenCount = categorized.length >= 2 && uncategorizedEntry ? uncategorizedEntry.itemCount : 0;
+        const totalSpent = pieData.reduce((s, c) => s + c.totalSpent, 0);
+
+        return (
+          <Card className="shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                {t.spendingByCategory}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="h-[240px] sm:h-[300px] mt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={(props: unknown) => renderSpendingLabel(props as any, chartLabelFill)}
+                      outerRadius="70%"
+                      innerRadius="40%"
+                      dataKey="totalSpent"
+                      nameKey="category"
+                      paddingAngle={2}
+                    >
+                      {pieData.map((_, index) => (
+                        <Cell key={`cat-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="white" strokeWidth={2} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: unknown) => [`₪${Number(value).toFixed(2)}`, '']}
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Ranked breakdown table */}
+              <div className="mt-3 space-y-1.5">
+                {pieData.map((entry, index) => {
+                  const pct = totalSpent > 0 ? (entry.totalSpent / totalSpent) * 100 : 0;
+                  return (
+                    <div key={entry.category} className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+                      <span className="flex-1 text-sm text-slate-700 dark:text-slate-300 truncate">{entry.category}</span>
+                      <span className="text-sm font-medium text-slate-900 dark:text-slate-100 flex-shrink-0">₪{entry.totalSpent.toFixed(0)}</span>
+                      <span className="text-xs text-slate-400 w-10 text-right flex-shrink-0">{pct.toFixed(0)}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {hiddenCount > 0 && (
+                <p className="mt-2 text-xs text-slate-400 dark:text-slate-500 text-center">
+                  * {hiddenCount} פריטים ללא קטגוריה לא מוצגים בגרף
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Main data: items (what was purchased). Date is context. */}
       <div className="space-y-6">
@@ -912,60 +936,82 @@ export function Dashboard({ userId }: DashboardProps) {
         )}
 
         {/* Category Distribution Chart */}
-        {stats.categoryDistribution.length > 0 && (
-          <Card className="shadow-sm hover:shadow-md transition-shadow">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                {t.categoryDistribution}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="h-[240px] sm:h-[350px] mt-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={stats.categoryDistribution}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={(props: unknown) => renderCustomizedLabel(props as any, chartLabelFill)}
-                      outerRadius="70%"
-                      innerRadius="40%"
-                      fill="#8884d8"
-                      dataKey="total_quantity"
-                      nameKey="category"
-                      paddingAngle={2}
-                    >
-                      {stats.categoryDistribution.map((entry, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={PIE_COLORS[index % PIE_COLORS.length]}
-                          stroke="white"
-                          strokeWidth={2}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      formatter={(value: unknown, name?: string) => [value as React.ReactNode, name ?? '']}
-                      contentStyle={{
-                        backgroundColor: 'white',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                      }}
-                    />
-                    <Legend 
-                      formatter={(value) => (
-                        <span className="text-sm text-slate-700 dark:text-slate-300">{value}</span>
-                      )}
-                      wrapperStyle={{ paddingTop: '20px' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {stats.categoryDistribution.length > 0 && (() => {
+          const NO_CAT = 'ללא קטגוריה';
+          const categorized = stats.categoryDistribution.filter(c => c.category !== NO_CAT);
+          const uncategorizedEntry = stats.categoryDistribution.find(c => c.category === NO_CAT);
+          const pieData = categorized.length >= 2 ? categorized : stats.categoryDistribution;
+          const hiddenQty = categorized.length >= 2 && uncategorizedEntry ? uncategorizedEntry.total_quantity : 0;
+          const totalQty = pieData.reduce((s, c) => s + c.total_quantity, 0);
+
+          return (
+            <Card className="shadow-sm hover:shadow-md transition-shadow">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  {t.categoryDistribution}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="h-[240px] sm:h-[300px] mt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={(props: unknown) => renderCustomizedLabel(props as any, chartLabelFill)}
+                        outerRadius="70%"
+                        innerRadius="40%"
+                        dataKey="total_quantity"
+                        nameKey="category"
+                        paddingAngle={2}
+                      >
+                        {pieData.map((_, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={PIE_COLORS[index % PIE_COLORS.length]}
+                            stroke="white"
+                            strokeWidth={2}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: unknown, name?: string) => [value as React.ReactNode, name ?? '']}
+                        contentStyle={{
+                          backgroundColor: 'white',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Ranked breakdown table */}
+                <div className="mt-3 space-y-1.5">
+                  {pieData.map((entry, index) => {
+                    const pct = totalQty > 0 ? (entry.total_quantity / totalQty) * 100 : 0;
+                    return (
+                      <div key={entry.category} className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+                        <span className="flex-1 text-sm text-slate-700 dark:text-slate-300 truncate">{entry.category}</span>
+                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100 flex-shrink-0">{entry.total_quantity} יח&apos;</span>
+                        <span className="text-xs text-slate-400 w-10 text-right flex-shrink-0">{pct.toFixed(0)}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {hiddenQty > 0 && (
+                  <p className="mt-2 text-xs text-slate-400 dark:text-slate-500 text-center">
+                    * {hiddenQty} יחידות ללא קטגוריה לא מוצגות בגרף
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* Monthly Trend Chart - Item Specific */}
         <Card className="shadow-sm hover:shadow-md transition-shadow">

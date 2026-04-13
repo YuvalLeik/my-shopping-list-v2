@@ -37,7 +37,7 @@ import { t } from '@/lib/translations';
 import { fetchLocalUsers, LocalUser } from '@/lib/localUsers';
 import { resolveItemDisplayInfo } from '@/lib/itemAliases';
 import { CATEGORIES } from '@/lib/categories';
-import { getItemAveragePrice } from '@/lib/itemPrices';
+import { getItemAveragePrice, recordPrices } from '@/lib/itemPrices';
 import { GroceryItemRow } from '@/components/GroceryItemRow';
 
 export default function Home() {
@@ -51,6 +51,9 @@ export default function Home() {
   const [newItemName, setNewItemName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('ללא קטגוריה');
   const [newItemQuantity, setNewItemQuantity] = useState(1);
+  const [newItemPrice, setNewItemPrice] = useState<string>('');
+  const [priceDialogItem, setPriceDialogItem] = useState<GroceryItem | null>(null);
+  const [priceDialogValue, setPriceDialogValue] = useState<string>('');
   const [loadingItems, setLoadingItems] = useState(false);
   const [addingItem, setAddingItem] = useState(false);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
@@ -363,12 +366,17 @@ export default function Home() {
         }
       }
 
-      // Fetch estimated price from historical data
+      // Determine estimated price: prefer user-entered value, then historical average
       let estimatedPrice: number | null = null;
-      try {
-        estimatedPrice = await getItemAveragePrice(userId, itemName);
-      } catch {
-        // Non-critical - continue without estimated price
+      const userEnteredPrice = parseFloat(newItemPrice.replace(',', '.'));
+      if (!isNaN(userEnteredPrice) && userEnteredPrice > 0) {
+        estimatedPrice = userEnteredPrice;
+      } else {
+        try {
+          estimatedPrice = await getItemAveragePrice(userId, itemName);
+        } catch {
+          // Non-critical - continue without estimated price
+        }
       }
       
       // Create item in user's list FIRST (critical - per-user)
@@ -390,6 +398,16 @@ export default function Home() {
         throw createError; // Fail - item not added to user's list
       }
       
+      // Save manually-entered price to history if user typed it in (no prior history)
+      if (!isNaN(userEnteredPrice) && userEnteredPrice > 0) {
+        recordPrices(userId, [{
+          itemName,
+          price: userEnteredPrice * newItemQuantity,
+          quantity: newItemQuantity,
+          unitPrice: userEnteredPrice,
+        }]).catch(() => { /* non-critical */ });
+      }
+
       // Step 2: Handle image upload if selected (AFTER item creation succeeded)
       if (selectedImageFile) {
         setUploadingImage(true);
@@ -433,6 +451,7 @@ export default function Home() {
       setNewItemName('');
       setNewItemCategory('ללא קטגוריה');
       setNewItemQuantity(1);
+      setNewItemPrice('');
       setSelectedImageFile(null);
       setImagePreview(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -459,11 +478,12 @@ export default function Home() {
     setNewItemName(suggestion);
     setShowSuggestions(false);
     
-    // Auto-fill category and image from catalog
+    // Auto-fill category, image, and price from catalog/history
     try {
-      const [foundCategory, shoppingItem] = await Promise.all([
+      const [foundCategory, shoppingItem, avgPrice] = await Promise.all([
         getItemCategoryByName(suggestion, userId),
         getShoppingItemByName(suggestion),
+        getItemAveragePrice(userId, suggestion),
       ]);
       if (foundCategory) {
         setNewItemCategory(foundCategory);
@@ -472,8 +492,42 @@ export default function Home() {
       if (shoppingItem?.image_url) {
         setImagePreview(shoppingItem.image_url);
       }
+      if (avgPrice != null) {
+        setNewItemPrice(avgPrice.toFixed(2));
+      } else {
+        setNewItemPrice('');
+      }
     } catch {
       // Non-critical
+    }
+  };
+
+  const handleOpenAddPrice = (item: GroceryItem) => {
+    setPriceDialogItem(item);
+    setPriceDialogValue(item.estimated_price != null ? item.estimated_price.toFixed(2) : '');
+  };
+
+  const handleSavePriceDialog = async () => {
+    if (!priceDialogItem || !activeUserId) return;
+    const parsed = parseFloat(priceDialogValue.replace(',', '.'));
+    if (isNaN(parsed) || parsed <= 0) {
+      toast.error('מחיר לא תקין');
+      return;
+    }
+    try {
+      await updateGroceryItem(priceDialogItem.id, { estimated_price: parsed });
+      await recordPrices(activeUserId, [{
+        itemName: priceDialogItem.name,
+        price: parsed * priceDialogItem.quantity,
+        quantity: priceDialogItem.quantity,
+        unitPrice: parsed,
+      }]);
+      setItems(prev => prev.map(i => i.id === priceDialogItem.id ? { ...i, estimated_price: parsed } : i));
+      toast.success('המחיר נשמר');
+      setPriceDialogItem(null);
+      setPriceDialogValue('');
+    } catch {
+      toast.error('לא הצלחתי לשמור את המחיר');
     }
   };
 
@@ -1371,6 +1425,33 @@ export default function Home() {
                         </div>
                       </div>
 
+                      {/* Unit Price */}
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 sm:mb-2 block text-right">
+                          מחיר ליחידה (₪)
+                          {newItemPrice ? (
+                            <span className="mr-2 text-xs font-normal text-emerald-600 dark:text-emerald-400">
+                              · מהיסטוריה
+                            </span>
+                          ) : (
+                            <span className="mr-2 text-xs font-normal text-slate-400 dark:text-slate-500">
+                              · אופציונלי
+                            </span>
+                          )}
+                        </label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={newItemPrice}
+                          onChange={(e) => setNewItemPrice(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full text-right"
+                          disabled={addingItem}
+                          dir="ltr"
+                        />
+                      </div>
+
                       {/* Image */}
                       <div>
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 sm:mb-2 block text-right">
@@ -1783,7 +1864,7 @@ export default function Home() {
                                     </h3>
                                     <ul className="space-y-2 sm:space-y-3">
                                       {categoryItems.map((item) => (
-                                        <GroceryItemRow key={item.id} item={item} variant="active" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
+                                        <GroceryItemRow key={item.id} item={item} variant="active" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} onAddPrice={handleOpenAddPrice} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
                                       ))}
                                     </ul>
                                   </div>
@@ -1792,7 +1873,7 @@ export default function Home() {
                                 // Alphabetical list
                                 <ul className="space-y-2 sm:space-y-3">
                                   {groupedNotPurchased['כל הפריטים']?.map((item) => (
-                                    <GroceryItemRow key={item.id} item={item} variant="active" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
+                                    <GroceryItemRow key={item.id} item={item} variant="active" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} onAddPrice={handleOpenAddPrice} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
                                   ))}
                                 </ul>
                               )}
@@ -2099,6 +2180,36 @@ export default function Home() {
           <Bot className="h-6 w-6" />
         </Button>
       )}
+
+      {/* Add Price Dialog */}
+      <AlertDialog open={!!priceDialogItem} onOpenChange={(open) => { if (!open) { setPriceDialogItem(null); setPriceDialogValue(''); } }}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>הוסף מחיר ליחידה</AlertDialogTitle>
+            <AlertDialogDescription>
+              {priceDialogItem?.name} — הזן מחיר ליחידה (₪) כדי לשפר את ההצעות העתידיות.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={priceDialogValue}
+              onChange={(e) => setPriceDialogValue(e.target.value)}
+              placeholder="0.00"
+              className="text-right"
+              dir="ltr"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSavePriceDialog(); }}
+            />
+          </div>
+          <AlertDialogFooter className="flex-row-reverse gap-2">
+            <AlertDialogAction onClick={handleSavePriceDialog}>שמור</AlertDialogAction>
+            <AlertDialogCancel>ביטול</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Import Receipt Panel */}
       {showImportReceipt && activeUserId && (
