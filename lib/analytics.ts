@@ -5,7 +5,7 @@ export type { PricePoint, StorePriceComparison, MonthlySpending };
 
 /**
  * Batch-fetch categories from the global shopping_items catalog for a list of item names.
- * Returns a map of lowercased item name → category string (non-empty).
+ * Single `.in()` query only — no per-name fallback loops.
  */
 async function batchGetCategoriesFromCatalog(names: string[]): Promise<Map<string, string>> {
   const result = new Map<string, string>();
@@ -25,27 +25,67 @@ async function batchGetCategoriesFromCatalog(names: string[]): Promise<Map<strin
         result.set(row.name.trim().toLowerCase(), row.category);
       }
     }
-
-    // Also try case-insensitive fallback for names not found above
-    const notFound = uniqueNames.filter(n => !result.has(n.toLowerCase()));
-    if (notFound.length > 0) {
-      for (const name of notFound) {
-        const { data: fuzzy } = await supabase
-          .from('shopping_items')
-          .select('name, category')
-          .ilike('name', name)
-          .limit(1)
-          .maybeSingle();
-        if (fuzzy?.category) {
-          result.set(name.toLowerCase(), fuzzy.category);
-        }
-      }
-    }
   } catch {
-    // Non-critical — fall back to "ללא קטגוריה"
+    // Non-critical
   }
 
   return result;
+}
+
+export interface LightDashboardStats {
+  totalPurchasedItems: number;
+  totalCompletedLists: number;
+  avgItemsPerList: number;
+  totalSpending: number;
+}
+
+/**
+ * Lightweight KPI stats — only 3 fast Supabase queries, no loops.
+ */
+export async function getLightDashboardStats(userId: string): Promise<LightDashboardStats> {
+  try {
+    const [listsResult, spendingResult] = await Promise.all([
+      supabase
+        .from('grocery_lists')
+        .select('id')
+        .eq('local_user_id', userId)
+        .not('completed_at', 'is', null),
+      supabase
+        .from('item_prices')
+        .select('price')
+        .eq('local_user_id', userId),
+    ]);
+
+    const completedLists = listsResult.data || [];
+    const totalCompletedLists = completedLists.length;
+
+    let totalPurchasedItems = 0;
+    if (completedLists.length > 0) {
+      const listIds = completedLists.map(l => l.id);
+      const { data: items } = await supabase
+        .from('grocery_items')
+        .select('quantity')
+        .in('list_id', listIds)
+        .eq('purchased', true);
+      totalPurchasedItems = (items || []).reduce((sum, item) => sum + item.quantity, 0);
+    }
+
+    const totalSpending = Math.round(
+      (spendingResult.data || []).reduce((sum, r) => sum + Number(r.price), 0) * 100
+    ) / 100;
+
+    return {
+      totalPurchasedItems,
+      totalCompletedLists,
+      avgItemsPerList: totalCompletedLists > 0
+        ? Math.round((totalPurchasedItems / totalCompletedLists) * 10) / 10
+        : 0,
+      totalSpending,
+    };
+  } catch (error) {
+    console.error('Error getting light dashboard stats:', error);
+    return { totalPurchasedItems: 0, totalCompletedLists: 0, avgItemsPerList: 0, totalSpending: 0 };
+  }
 }
 
 export interface TopItem {
