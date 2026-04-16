@@ -234,4 +234,17 @@ export const t = {
   backToLists: 'חזור לרשימות קניות',
   user: 'משתמש',
   estimatedCost: 'עלות משוערת',
+
+  // Market price comparison
+  whereToShopToday: 'איפה כדאי לקנות היום?',
+  cheapestChain: 'הכי זול',
+  estimatedBasket: 'סל משוער',
+  lastUpdated: 'עודכן לאחרונה',
+  noMarketData: 'אין נתוני מחירי שוק. הנתונים יתעדכנו אוטומטית.',
+  marketItemCount: (n: number) => `${n} פריטים`,
+  showDetails: 'הצג פרטים',
+  hideDetails: 'הסתר פרטים',
+  promoLabel: 'מבצע',
+  shopRecommendation: (chain: string, cost: number) => `לפי המחירים שלך, **${chain}** הכי זול היום (כ-₪${cost}).`,
+  seeDetails: 'לפרטים',
 };

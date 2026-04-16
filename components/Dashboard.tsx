@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, ShoppingCart, ListChecks, TrendingUp, DollarSign, Store } from 'lucide-react';
+import { Loader2, ShoppingCart, ListChecks, TrendingUp, DollarSign, Store, Tag, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import {
   getLightDashboardStats, LightDashboardStats,
   getTopItemsBySpending, SpendingItem,
   getMonthlySpendingStats, MonthlySpendingPoint,
   getStoreComparisonByBasket, StoreBasketComparison,
+  getDailyPriceRecommendation, StoreRecommendation, DailyPriceRecommendationResult,
 } from '@/lib/analytics';
 import { t } from '@/lib/translations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -76,6 +77,8 @@ export function Dashboard({ userId }: DashboardProps) {
   const [storeBaskets, setStoreBaskets] = useState<StoreBasketComparison[]>([]);
   const [topBySpending, setTopBySpending] = useState<SpendingItem[]>([]);
   const [monthlySpending, setMonthlySpending] = useState<MonthlySpendingPoint[]>([]);
+  const [marketRec, setMarketRec] = useState<DailyPriceRecommendationResult | null>(null);
+  const [expandedChain, setExpandedChain] = useState<string | null>(null);
 
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -94,17 +97,19 @@ export function Dashboard({ userId }: DashboardProps) {
     async function loadStats() {
       setLoading(true);
       try {
-        const [kpis, baskets, topSpend, monthSpend] = await Promise.all([
+        const [kpis, baskets, topSpend, monthSpend, market] = await Promise.all([
           getLightDashboardStats(userId!),
           getStoreComparisonByBasket(userId!),
           getTopItemsBySpending(userId!, 10),
           getMonthlySpendingStats(userId!),
+          getDailyPriceRecommendation(userId!),
         ]);
         if (cancelled) return;
         setStats(kpis);
         setStoreBaskets(baskets);
         setTopBySpending(topSpend);
         setMonthlySpending(monthSpend);
+        setMarketRec(market);
       } catch (error) {
         console.error('Failed to load dashboard stats:', error);
         if (!cancelled) {
@@ -225,6 +230,81 @@ export function Dashboard({ userId }: DashboardProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Where to shop today? — Market price recommendation */}
+      {marketRec && marketRec.recommendations.length > 0 && (
+        <Card className="shadow-sm hover:shadow-md transition-shadow border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-900/20 dark:to-slate-900">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Store className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              {t.whereToShopToday}
+            </CardTitle>
+            {marketRec.fetchedAt && (
+              <p className="text-xs text-slate-400 mt-1">
+                {t.lastUpdated}: {new Date(marketRec.fetchedAt).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
+          </CardHeader>
+          <CardContent className="pt-0 space-y-2">
+            {marketRec.recommendations.map((rec: StoreRecommendation, index: number) => {
+              const isCheapest = index === 0;
+              const isExpanded = expandedChain === rec.chainName;
+              return (
+                <div
+                  key={rec.chainName}
+                  className={`rounded-lg border p-3 transition-colors ${isCheapest
+                    ? 'border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-900/30'
+                    : 'border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-500 w-5 text-center">{index + 1}</span>
+                    <span className="flex-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                      {rec.chainName}
+                    </span>
+                    {isCheapest && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500 text-white">
+                        {t.cheapestChain}
+                      </span>
+                    )}
+                    <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      ₪{rec.totalBasketCost.toFixed(0)}
+                    </span>
+                    <button
+                      onClick={() => setExpandedChain(isExpanded ? null : rec.chainName)}
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    >
+                      {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-400 mr-7">{t.marketItemCount(rec.itemCount)}</p>
+
+                  {isExpanded && (
+                    <div className="mt-2 mr-7 space-y-1 border-t border-slate-200 dark:border-slate-700 pt-2">
+                      {rec.items.map((item) => (
+                        <div key={item.itemName} className="flex items-center text-xs gap-1.5">
+                          <span className="flex-1 text-slate-600 dark:text-slate-400">{item.itemName}</span>
+                          {item.promoPrice != null ? (
+                            <>
+                              <span className="line-through text-slate-400">₪{item.price.toFixed(2)}</span>
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">₪{item.promoPrice.toFixed(2)}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 flex items-center gap-0.5">
+                                <Tag className="h-2.5 w-2.5" />{t.promoLabel}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="font-medium text-slate-700 dark:text-slate-300">₪{item.price.toFixed(2)}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Store Basket Comparison — "Where is cheapest?" */}
       {storeBaskets.length > 0 && (

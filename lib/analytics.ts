@@ -679,6 +679,81 @@ export async function getTotalSpending(userId: string): Promise<number> {
   return Math.round(data.reduce((sum, r) => sum + Number(r.price), 0) * 100) / 100;
 }
 
+// ---- Market Price Recommendation (from Cheapersal daily data) ----
+
+export interface MarketItemPrice {
+  itemName: string;
+  price: number;
+  promoPrice: number | null;
+  promoDescription: string | null;
+}
+
+export interface StoreRecommendation {
+  chainName: string;
+  totalBasketCost: number;
+  itemCount: number;
+  items: MarketItemPrice[];
+}
+
+export interface DailyPriceRecommendationResult {
+  recommendations: StoreRecommendation[];
+  fetchedAt: string | null;
+}
+
+/**
+ * Queries market_price_comparisons for the user's latest data,
+ * sums total basket cost per chain, returns chains ranked cheapest-first.
+ */
+export async function getDailyPriceRecommendation(userId: string): Promise<DailyPriceRecommendationResult> {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 2);
+
+  const { data, error } = await supabase
+    .from('market_price_comparisons')
+    .select('item_name, chain_name, price, promo_price, promo_description, fetched_at')
+    .eq('local_user_id', userId)
+    .gte('fetched_at', cutoff.toISOString())
+    .order('fetched_at', { ascending: false });
+
+  if (error || !data?.length) {
+    return { recommendations: [], fetchedAt: null };
+  }
+
+  const fetchedAt = data[0].fetched_at;
+
+  const chainMap = new Map<string, { items: Map<string, MarketItemPrice>; total: number }>();
+
+  for (const row of data) {
+    const chain = row.chain_name;
+    if (!chainMap.has(chain)) {
+      chainMap.set(chain, { items: new Map(), total: 0 });
+    }
+    const entry = chainMap.get(chain)!;
+
+    if (!entry.items.has(row.item_name)) {
+      const effectivePrice = row.promo_price != null ? row.promo_price : row.price;
+      entry.items.set(row.item_name, {
+        itemName: row.item_name,
+        price: Number(row.price),
+        promoPrice: row.promo_price != null ? Number(row.promo_price) : null,
+        promoDescription: row.promo_description,
+      });
+      entry.total += Number(effectivePrice);
+    }
+  }
+
+  const recommendations: StoreRecommendation[] = Array.from(chainMap.entries())
+    .map(([chainName, { items, total }]) => ({
+      chainName,
+      totalBasketCost: Math.round(total * 100) / 100,
+      itemCount: items.size,
+      items: Array.from(items.values()),
+    }))
+    .sort((a, b) => a.totalBasketCost - b.totalBasketCost);
+
+  return { recommendations, fetchedAt };
+}
+
 // Re-export price library functions for dashboard use
 export { getAverageItemPrices, getItemPriceHistory, getStorePriceComparison, getSpendingByMonthFromPrices };
 

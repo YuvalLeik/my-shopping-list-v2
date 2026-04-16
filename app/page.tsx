@@ -38,6 +38,7 @@ import { fetchLocalUsers, LocalUser } from '@/lib/localUsers';
 import { resolveItemDisplayInfo } from '@/lib/itemAliases';
 import { CATEGORIES } from '@/lib/categories';
 import { getItemAveragePrice, recordPrices } from '@/lib/itemPrices';
+import { getDailyPriceRecommendation, DailyPriceRecommendationResult } from '@/lib/analytics';
 import { GroceryItemRow } from '@/components/GroceryItemRow';
 
 export default function Home() {
@@ -106,6 +107,8 @@ export default function Home() {
   const [viewingStandalonePurchase, setViewingStandalonePurchase] = useState<PurchaseRecordWithItems | null>(null);
   const [completedListsForDropdown, setCompletedListsForDropdown] = useState<GroceryList[]>([]);
   const [purchaseDisplayInfo, setPurchaseDisplayInfo] = useState<Map<string, { canonicalName: string; imageUrl: string | null }>>(new Map());
+  const [marketBanner, setMarketBanner] = useState<DailyPriceRecommendationResult | null>(null);
+  const [marketBannerDismissed, setMarketBannerDismissed] = useState(false);
 
   // Load all item names for autocomplete from global catalog (shopping_items)
   // This is shared across all users for learning/suggestions
@@ -282,6 +285,18 @@ export default function Home() {
     loadItems();
     return () => { cancelled = true; };
   }, [selectedListId, activeUserId]);
+
+  useEffect(() => {
+    if (!activeUserId) return;
+    let cancelled = false;
+    getDailyPriceRecommendation(activeUserId).then(result => {
+      if (!cancelled) {
+        setMarketBanner(result);
+        setMarketBannerDismissed(false);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeUserId]);
 
   // Filter suggestions based on input
   useEffect(() => {
@@ -1814,6 +1829,24 @@ export default function Home() {
                             )}
                           </div>
                           
+                          {/* Market price banner */}
+                          {!marketBannerDismissed && marketBanner && marketBanner.recommendations.length > 0 && items.length > 0 && (() => {
+                            const cheapest = marketBanner.recommendations[0];
+                            return (
+                              <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 text-sm">
+                                <span className="text-emerald-700 dark:text-emerald-300 flex-1">
+                                  לפי המחירים, <strong>{cheapest.chainName}</strong> הכי זול היום (כ-₪{cheapest.totalBasketCost.toFixed(0)}).
+                                </span>
+                                <button
+                                  onClick={() => setMarketBannerDismissed(true)}
+                                  className="text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-300 flex-shrink-0"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            );
+                          })()}
+
                           {/* Empty States */}
                           {searchQuery.trim() && filteredItems.length === 0 && (
                             <Card className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
