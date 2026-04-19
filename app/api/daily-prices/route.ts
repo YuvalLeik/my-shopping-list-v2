@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getProductByBarcode, getProductPrices } from '@/lib/cheapersal';
+import { getProductPrices } from '@/lib/cheapersal';
 
 const TOP_ITEMS_LIMIT = 15;
 const STALE_DAYS = 2;
+const OFF_SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,12 +12,30 @@ interface UserCronStats {
   userId: string;
   topItems: number;
   mappedItems: number;
+  autoResolved: number;
   unmappedItems: string[];
   insertedRows: number;
 }
 
 function normalizeItemName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+async function searchBarcodeViaOpenFoodFacts(itemName: string): Promise<string | null> {
+  try {
+    const url = `${OFF_SEARCH_URL}?search_terms=${encodeURIComponent(itemName)}&search_simple=1&action=process&json=true&page_size=5&fields=code,product_name,countries_tags`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.products?.length) return null;
+    const israeliProduct = data.products.find(
+      (p: { countries_tags?: string[] }) => p.countries_tags?.includes('en:israel')
+    );
+    const product = israeliProduct || data.products[0];
+    return product?.code || null;
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(request: Request) {
@@ -72,7 +91,7 @@ async function processUser(userId: string): Promise<UserCronStats> {
     .eq('local_user_id', userId);
 
   if (!priceRows?.length) {
-    return { userId, topItems: 0, mappedItems: 0, unmappedItems: [], insertedRows: 0 };
+    return { userId, topItems: 0, mappedItems: 0, autoResolved: 0, unmappedItems: [], insertedRows: 0 };
   }
 
   const countMap = new Map<string, number>();
@@ -99,9 +118,26 @@ async function processUser(userId: string): Promise<UserCronStats> {
 
   const mappedItems: Array<{ itemName: string; barcode: string }> = [];
   const unmappedItems: string[] = [];
+  let autoResolved = 0;
+
   for (const itemName of topItems) {
     const normalized = normalizeItemName(itemName);
-    const barcode = barcodeMap.get(normalized);
+    let barcode: string | undefined = barcodeMap.get(normalized);
+
+    if (!barcode) {
+      barcode = (await searchBarcodeViaOpenFoodFacts(itemName)) ?? undefined;
+      if (barcode) {
+        autoResolved++;
+        await supabase.from('user_item_barcodes').upsert({
+          local_user_id: userId,
+          item_name: itemName,
+          item_name_normalized: normalized,
+          barcode,
+          source: 'auto-openfoodfacts',
+        }, { onConflict: 'local_user_id,item_name_normalized' });
+      }
+    }
+
     if (!barcode) {
       unmappedItems.push(itemName);
       continue;
@@ -122,10 +158,6 @@ async function processUser(userId: string): Promise<UserCronStats> {
 
   for (const mapped of mappedItems) {
     try {
-      // Skip invalid mappings proactively so one bad barcode won't break all rows.
-      const product = await getProductByBarcode(mapped.barcode);
-      if (!product) continue;
-
       const prices = await getProductPrices(mapped.barcode);
       for (const entry of prices) {
         rows.push({
@@ -145,6 +177,11 @@ async function processUser(userId: string): Promise<UserCronStats> {
   }
 
   if (rows.length > 0) {
+    await supabase
+      .from('market_price_comparisons')
+      .delete()
+      .eq('local_user_id', userId);
+
     const { error } = await supabase
       .from('market_price_comparisons')
       .insert(rows);
@@ -154,6 +191,7 @@ async function processUser(userId: string): Promise<UserCronStats> {
         userId,
         topItems: topItems.length,
         mappedItems: mappedItems.length,
+        autoResolved,
         unmappedItems,
         insertedRows: 0,
       };
@@ -164,6 +202,7 @@ async function processUser(userId: string): Promise<UserCronStats> {
     userId,
     topItems: topItems.length,
     mappedItems: mappedItems.length,
+    autoResolved,
     unmappedItems,
     insertedRows: rows.length,
   };

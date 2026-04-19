@@ -1,4 +1,4 @@
-const BASE_URL = 'https://cheapersal.co.il/api/v1';
+const BASE_URL = 'https://api.cheapersal.co.il/api/v1';
 
 function getApiKey(): string {
   const key = process.env.CHEAPERSAL_API_KEY;
@@ -8,9 +8,15 @@ function getApiKey(): string {
 
 function headers(): HeadersInit {
   return {
-    'Authorization': `Bearer ${getApiKey()}`,
+    'X-API-Key': getApiKey(),
     'Accept': 'application/json',
   };
+}
+
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  meta?: Record<string, unknown>;
 }
 
 export interface CheapersalChain {
@@ -31,6 +37,19 @@ export interface CheapersalPriceEntry {
   branchId?: string;
   branchName?: string;
   price: number;
+}
+
+interface RawPriceEntry {
+  price: number;
+  chain: { id: string; name: string };
+  branch: { id: string; name: string; city?: string };
+  promo: { description: string; discountRate?: number } | null;
+}
+
+interface PricesResponseData {
+  product: CheapersalProduct;
+  prices: RawPriceEntry[];
+  summary?: unknown;
 }
 
 export interface CheapersalPromo {
@@ -54,7 +73,9 @@ async function apiFetch<T>(path: string, params?: Record<string, string>): Promi
       console.error(`Cheapersal API ${res.status}: ${path}`);
       return null;
     }
-    return await res.json();
+    const json: ApiResponse<T> = await res.json();
+    if (!json.success) return null;
+    return json.data;
   } catch (err) {
     console.error(`Cheapersal API error: ${path}`, err);
     return null;
@@ -72,8 +93,22 @@ export async function getProductByBarcode(barcode: string): Promise<CheapersalPr
 }
 
 export async function getProductPrices(barcode: string): Promise<CheapersalPriceEntry[]> {
-  const data = await apiFetch<CheapersalPriceEntry[]>(`/products/${barcode}/prices`);
-  return data || [];
+  const data = await apiFetch<PricesResponseData>(`/products/${barcode}/prices`);
+  if (!data?.prices) return [];
+  const seen = new Set<string>();
+  const results: CheapersalPriceEntry[] = [];
+  for (const entry of data.prices) {
+    if (seen.has(entry.chain.id)) continue;
+    seen.add(entry.chain.id);
+    results.push({
+      chainId: entry.chain.id,
+      chainName: entry.chain.name,
+      branchId: entry.branch?.id,
+      branchName: entry.branch?.name,
+      price: entry.price,
+    });
+  }
+  return results;
 }
 
 export async function getProductPromos(barcode: string): Promise<CheapersalPromo[]> {
