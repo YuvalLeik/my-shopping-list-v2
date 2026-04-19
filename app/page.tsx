@@ -113,7 +113,6 @@ export default function Home() {
   const [unmappedItems, setUnmappedItems] = useState<UnmappedItem[]>([]);
   const [barcodeDrafts, setBarcodeDrafts] = useState<Record<string, string>>({});
   const [savingBarcodeFor, setSavingBarcodeFor] = useState<string | null>(null);
-  const [loadingBarcodeHelper, setLoadingBarcodeHelper] = useState(false);
 
   const loadMarketRecommendation = (userId: string) => getDailyPriceRecommendation(userId);
 
@@ -296,7 +295,6 @@ export default function Home() {
   useEffect(() => {
     if (!activeUserId) return;
     let cancelled = false;
-    setLoadingBarcodeHelper(true);
     loadMarketRecommendation(activeUserId)
       .then((result) => {
         if (cancelled) return;
@@ -313,9 +311,6 @@ export default function Home() {
         if (cancelled) return;
         setUnmappedItems([]);
       })
-      .finally(() => {
-        if (!cancelled) setLoadingBarcodeHelper(false);
-      });
     return () => { cancelled = true; };
   }, [activeUserId]);
 
@@ -1902,7 +1897,7 @@ export default function Home() {
                             );
                           })()}
 
-                          {(loadingBarcodeHelper || unmappedItems.length > 0) && (
+                          {unmappedItems.length > 0 && (
                             <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/20 p-3 sm:p-4 space-y-2">
                               <div className="text-sm font-semibold text-amber-900 dark:text-amber-200">
                                 חסרים ברקודים להשוואת סופרים
@@ -1910,12 +1905,6 @@ export default function Home() {
                               <p className="text-xs text-amber-800 dark:text-amber-300">
                                 הוסף ברקוד לפריטים הבאים פעם אחת, ואז ההשוואה היומית תתחיל להופיע אוטומטית.
                               </p>
-                              {loadingBarcodeHelper && (
-                                <div className="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  בודק אילו פריטים עדיין לא ממופים...
-                                </div>
-                              )}
                               <div className="space-y-2">
                                 {unmappedItems.map((entry) => (
                                   <div key={entry.itemName} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-800 rounded-md p-2">
