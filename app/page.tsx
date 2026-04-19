@@ -39,7 +39,6 @@ import { resolveItemDisplayInfo } from '@/lib/itemAliases';
 import { CATEGORIES } from '@/lib/categories';
 import { getItemAveragePrice, recordPrices } from '@/lib/itemPrices';
 import { getDailyPriceRecommendation, DailyPriceRecommendationResult } from '@/lib/analytics';
-import { getTopUnmappedPricedItems, upsertUserItemBarcode, UnmappedItem } from '@/lib/userItemBarcodes';
 import { GroceryItemRow } from '@/components/GroceryItemRow';
 
 export default function Home() {
@@ -110,9 +109,6 @@ export default function Home() {
   const [purchaseDisplayInfo, setPurchaseDisplayInfo] = useState<Map<string, { canonicalName: string; imageUrl: string | null }>>(new Map());
   const [marketBanner, setMarketBanner] = useState<DailyPriceRecommendationResult | null>(null);
   const [marketBannerDismissed, setMarketBannerDismissed] = useState(false);
-  const [unmappedItems, setUnmappedItems] = useState<UnmappedItem[]>([]);
-  const [barcodeDrafts, setBarcodeDrafts] = useState<Record<string, string>>({});
-  const [savingBarcodeFor, setSavingBarcodeFor] = useState<string | null>(null);
 
   const loadMarketRecommendation = (userId: string) => getDailyPriceRecommendation(userId);
 
@@ -302,15 +298,6 @@ export default function Home() {
         setMarketBannerDismissed(false);
       })
       .catch(() => {});
-    getTopUnmappedPricedItems(activeUserId)
-      .then((rows) => {
-        if (cancelled) return;
-        setUnmappedItems(rows);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setUnmappedItems([]);
-      })
     return () => { cancelled = true; };
   }, [activeUserId]);
 
@@ -502,39 +489,6 @@ export default function Home() {
     }
   };
 
-  const handleSaveBarcodeMapping = async (itemName: string) => {
-    if (!activeUserId) return;
-    const barcode = (barcodeDrafts[itemName] || '').trim();
-    if (!barcode) {
-      toast.error('צריך להזין ברקוד לפני שמירה');
-      return;
-    }
-
-    setSavingBarcodeFor(itemName);
-    try {
-      await upsertUserItemBarcode(activeUserId, itemName, barcode, 'manual');
-      toast.success(`ברקוד נשמר עבור "${itemName}"`);
-
-      const [nextUnmapped, nextMarketRecommendation] = await Promise.all([
-        getTopUnmappedPricedItems(activeUserId),
-        loadMarketRecommendation(activeUserId),
-      ]);
-      setUnmappedItems(nextUnmapped);
-      setMarketBanner(nextMarketRecommendation);
-      setMarketBannerDismissed(false);
-      setBarcodeDrafts((prev) => {
-        const updated = { ...prev };
-        delete updated[itemName];
-        return updated;
-      });
-    } catch (error) {
-      toast.error('שמירת ברקוד נכשלה', {
-        description: error instanceof Error ? error.message : 'Unknown error',
-      });
-    } finally {
-      setSavingBarcodeFor(null);
-    }
-  };
 
   const handleSelectSuggestion = async (suggestion: string) => {
     if (!activeUserId) return;
@@ -1897,49 +1851,6 @@ export default function Home() {
                             );
                           })()}
 
-                          {unmappedItems.length > 0 && (
-                            <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/20 p-3 sm:p-4 space-y-2">
-                              <div className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                                חסרים ברקודים להשוואת סופרים
-                              </div>
-                              <p className="text-xs text-amber-800 dark:text-amber-300">
-                                הוסף ברקוד לפריטים הבאים פעם אחת, ואז ההשוואה היומית תתחיל להופיע אוטומטית.
-                              </p>
-                              <div className="space-y-2">
-                                {unmappedItems.map((entry) => (
-                                  <div key={entry.itemName} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-800 rounded-md p-2">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{entry.itemName}</div>
-                                      <div className="text-xs text-slate-500 dark:text-slate-400">נרכש {entry.usageCount} פעמים</div>
-                                    </div>
-                                    <Input
-                                      type="text"
-                                      inputMode="numeric"
-                                      pattern="[0-9]*"
-                                      placeholder="ברקוד"
-                                      value={barcodeDrafts[entry.itemName] || ''}
-                                      onChange={(e) =>
-                                        setBarcodeDrafts((prev) => ({ ...prev, [entry.itemName]: e.target.value }))
-                                      }
-                                      className="sm:w-[220px] bg-white dark:bg-slate-800"
-                                    />
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleSaveBarcodeMapping(entry.itemName)}
-                                      disabled={savingBarcodeFor === entry.itemName}
-                                      className="bg-amber-600 hover:bg-amber-700 text-white sm:w-auto"
-                                    >
-                                      {savingBarcodeFor === entry.itemName ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        'שמור ברקוד'
-                                      )}
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
 
                           {/* Empty States */}
                           {searchQuery.trim() && filteredItems.length === 0 && (
