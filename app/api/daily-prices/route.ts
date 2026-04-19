@@ -4,8 +4,6 @@ import { getProductPrices } from '@/lib/cheapersal';
 
 const TOP_ITEMS_LIMIT = 15;
 const STALE_DAYS = 2;
-const CHEAPERSAL_API = 'https://api.cheapersal.co.il/api/v1';
-const REFERENCE_BRANCH_ID = '5e92776525d080d0abfa3ac3';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,70 +16,28 @@ interface UserCronStats {
   insertedRows: number;
 }
 
-interface BranchProduct {
-  barcode: string;
-  name: string;
-  brand?: string;
-  price?: number;
-  category?: string;
-}
-
 function normalizeItemName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function cheapersalHeaders(): Record<string, string> {
-  return { 'X-API-Key': process.env.CHEAPERSAL_API_KEY || '', 'Accept': 'application/json' };
-}
-
-let productCatalog: BranchProduct[] | null = null;
-
-async function loadProductCatalog(): Promise<BranchProduct[]> {
-  if (productCatalog) return productCatalog;
-  const allProducts: BranchProduct[] = [];
-  const batchSize = 1000;
-  for (let skip = 0; skip < 10000; skip += batchSize) {
-    try {
-      const res = await fetch(
-        `${CHEAPERSAL_API}/branches/${REFERENCE_BRANCH_ID}/products?limit=${batchSize}&skip=${skip}`,
-        { headers: cheapersalHeaders() }
-      );
-      if (!res.ok) break;
-      const json = await res.json();
-      const products: BranchProduct[] = json.data?.products || [];
-      if (products.length === 0) break;
-      allProducts.push(...products);
-      if (products.length < batchSize) break;
-    } catch {
-      break;
-    }
+async function autoResolveBarcode(itemName: string): Promise<string | null> {
+  try {
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(itemName)}&search_simple=1&action=process&json=true&page_size=5&fields=code,product_name,countries_tags`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'MyShoppingList/1.0 (grocery comparison app)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.products?.length) return null;
+    const israeliProduct = data.products.find(
+      (p: { countries_tags?: string[] }) => p.countries_tags?.includes('en:israel')
+    );
+    const product = israeliProduct || data.products[0];
+    return product?.code || null;
+  } catch {
+    return null;
   }
-  productCatalog = allProducts;
-  return allProducts;
-}
-
-function fuzzyMatch(itemName: string, products: BranchProduct[]): string | null {
-  const normalized = normalizeItemName(itemName);
-  const keywords = normalized.split(' ').filter(w => w.length >= 2);
-  if (keywords.length === 0) return null;
-
-  let bestMatch: BranchProduct | null = null;
-  let bestScore = 0;
-
-  for (const product of products) {
-    const productName = normalizeItemName(product.name);
-    let score = 0;
-    for (const keyword of keywords) {
-      if (productName.includes(keyword)) score++;
-    }
-    const ratio = score / keywords.length;
-    if (ratio > bestScore && ratio >= 0.5) {
-      bestScore = ratio;
-      bestMatch = product;
-    }
-  }
-
-  return bestMatch?.barcode || null;
 }
 
 export async function GET(request: Request) {
@@ -171,8 +127,7 @@ async function processUser(userId: string): Promise<UserCronStats> {
     let barcode: string | undefined = barcodeMap.get(normalized);
 
     if (!barcode) {
-      const catalog = await loadProductCatalog();
-      barcode = fuzzyMatch(itemName, catalog) ?? undefined;
+      barcode = (await autoResolveBarcode(itemName)) ?? undefined;
       if (barcode) {
         autoResolved++;
         await supabase.from('user_item_barcodes').upsert({
@@ -180,7 +135,7 @@ async function processUser(userId: string): Promise<UserCronStats> {
           item_name: itemName,
           item_name_normalized: normalized,
           barcode,
-          source: 'auto-cheapersal',
+          source: 'auto-openfoodfacts',
         }, { onConflict: 'local_user_id,item_name_normalized' });
       }
     }
