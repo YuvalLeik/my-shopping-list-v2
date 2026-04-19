@@ -244,6 +244,11 @@ export function Dashboard({ userId }: DashboardProps) {
                 {t.lastUpdated}: {new Date(marketRec.fetchedAt).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             )}
+            {marketRec.coveredItems > 0 && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                כיסוי נתונים: {marketRec.coveredItems} פריטים ב-{marketRec.storeCount} רשתות
+              </p>
+            )}
           </CardHeader>
           <CardContent className="pt-0 space-y-2">
             {marketRec.recommendations.map((rec: StoreRecommendation, index: number) => {

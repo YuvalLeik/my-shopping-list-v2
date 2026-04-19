@@ -1,11 +1,23 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { searchProduct, getProductPrices } from '@/lib/cheapersal';
+import { getProductByBarcode, getProductPrices } from '@/lib/cheapersal';
 
 const TOP_ITEMS_LIMIT = 15;
 const STALE_DAYS = 2;
 
 export const dynamic = 'force-dynamic';
+
+interface UserCronStats {
+  userId: string;
+  topItems: number;
+  mappedItems: number;
+  unmappedItems: string[];
+  insertedRows: number;
+}
+
+function normalizeItemName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -23,10 +35,12 @@ export async function GET(request: Request) {
     }
 
     let totalInserted = 0;
+    const perUser: UserCronStats[] = [];
 
     for (const user of users) {
-      const inserted = await processUser(user.id);
-      totalInserted += inserted;
+      const result = await processUser(user.id);
+      totalInserted += result.insertedRows;
+      perUser.push(result);
     }
 
     const cutoff = new Date();
@@ -40,6 +54,7 @@ export async function GET(request: Request) {
       message: 'Daily prices updated',
       users: users.length,
       totalInserted,
+      perUser,
     });
   } catch (error) {
     console.error('Daily prices cron error:', error);
@@ -50,13 +65,15 @@ export async function GET(request: Request) {
   }
 }
 
-async function processUser(userId: string): Promise<number> {
+async function processUser(userId: string): Promise<UserCronStats> {
   const { data: priceRows } = await supabase
     .from('item_prices')
     .select('item_name')
     .eq('local_user_id', userId);
 
-  if (!priceRows?.length) return 0;
+  if (!priceRows?.length) {
+    return { userId, topItems: 0, mappedItems: 0, unmappedItems: [], insertedRows: 0 };
+  }
 
   const countMap = new Map<string, number>();
   for (const row of priceRows) {
@@ -68,7 +85,30 @@ async function processUser(userId: string): Promise<number> {
     .slice(0, TOP_ITEMS_LIMIT)
     .map(([name]) => name);
 
-  const barcodeCache = new Map<string, string>();
+  const normalizedTopItems = topItems.map(normalizeItemName);
+  const { data: mappings } = await supabase
+    .from('user_item_barcodes')
+    .select('item_name_normalized, barcode')
+    .eq('local_user_id', userId)
+    .in('item_name_normalized', normalizedTopItems);
+
+  const barcodeMap = new Map<string, string>();
+  for (const mapping of mappings || []) {
+    barcodeMap.set(mapping.item_name_normalized, mapping.barcode);
+  }
+
+  const mappedItems: Array<{ itemName: string; barcode: string }> = [];
+  const unmappedItems: string[] = [];
+  for (const itemName of topItems) {
+    const normalized = normalizeItemName(itemName);
+    const barcode = barcodeMap.get(normalized);
+    if (!barcode) {
+      unmappedItems.push(itemName);
+      continue;
+    }
+    mappedItems.push({ itemName, barcode });
+  }
+
   const rows: Array<{
     local_user_id: string;
     item_name: string;
@@ -80,23 +120,18 @@ async function processUser(userId: string): Promise<number> {
     promo_description: string | null;
   }> = [];
 
-  for (const itemName of topItems) {
+  for (const mapped of mappedItems) {
     try {
-      let barcode = barcodeCache.get(itemName);
+      // Skip invalid mappings proactively so one bad barcode won't break all rows.
+      const product = await getProductByBarcode(mapped.barcode);
+      if (!product) continue;
 
-      if (!barcode) {
-        const products = await searchProduct(itemName);
-        if (!products.length) continue;
-        barcode = products[0].barcode;
-        barcodeCache.set(itemName, barcode);
-      }
-
-      const prices = await getProductPrices(barcode);
+      const prices = await getProductPrices(mapped.barcode);
       for (const entry of prices) {
         rows.push({
           local_user_id: userId,
-          item_name: itemName,
-          barcode,
+          item_name: mapped.itemName,
+          barcode: mapped.barcode,
           chain_name: entry.chainName,
           branch_name: entry.branchName || null,
           price: entry.price,
@@ -105,7 +140,7 @@ async function processUser(userId: string): Promise<number> {
         });
       }
     } catch (err) {
-      console.error(`Failed to fetch prices for "${itemName}":`, err);
+      console.error(`Failed to fetch prices for "${mapped.itemName}":`, err);
     }
   }
 
@@ -115,9 +150,21 @@ async function processUser(userId: string): Promise<number> {
       .insert(rows);
     if (error) {
       console.error(`Insert error for user ${userId}:`, error);
-      return 0;
+      return {
+        userId,
+        topItems: topItems.length,
+        mappedItems: mappedItems.length,
+        unmappedItems,
+        insertedRows: 0,
+      };
     }
   }
 
-  return rows.length;
+  return {
+    userId,
+    topItems: topItems.length,
+    mappedItems: mappedItems.length,
+    unmappedItems,
+    insertedRows: rows.length,
+  };
 }

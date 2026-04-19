@@ -66,9 +66,9 @@ export async function getChains(): Promise<CheapersalChain[]> {
   return data || [];
 }
 
-export async function searchProduct(name: string): Promise<CheapersalProduct[]> {
-  const data = await apiFetch<CheapersalProduct[]>('/products', { q: name });
-  return data || [];
+export async function getProductByBarcode(barcode: string): Promise<CheapersalProduct | null> {
+  const data = await apiFetch<CheapersalProduct>(`/products/${barcode}`);
+  return data;
 }
 
 export async function getProductPrices(barcode: string): Promise<CheapersalPriceEntry[]> {

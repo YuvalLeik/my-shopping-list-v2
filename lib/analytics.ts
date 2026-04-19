@@ -698,6 +698,8 @@ export interface StoreRecommendation {
 export interface DailyPriceRecommendationResult {
   recommendations: StoreRecommendation[];
   fetchedAt: string | null;
+  coveredItems: number;
+  storeCount: number;
 }
 
 /**
@@ -716,7 +718,7 @@ export async function getDailyPriceRecommendation(userId: string): Promise<Daily
     .order('fetched_at', { ascending: false });
 
   if (error || !data?.length) {
-    return { recommendations: [], fetchedAt: null };
+    return { recommendations: [], fetchedAt: null, coveredItems: 0, storeCount: 0 };
   }
 
   const fetchedAt = data[0].fetched_at;
@@ -751,7 +753,12 @@ export async function getDailyPriceRecommendation(userId: string): Promise<Daily
     }))
     .sort((a, b) => a.totalBasketCost - b.totalBasketCost);
 
-  return { recommendations, fetchedAt };
+  return {
+    recommendations,
+    fetchedAt,
+    coveredItems: new Set(data.map((row) => row.item_name)).size,
+    storeCount: recommendations.length,
+  };
 }
 
 // Re-export price library functions for dashboard use
