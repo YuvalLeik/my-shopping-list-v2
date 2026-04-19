@@ -702,31 +702,32 @@ export interface DailyPriceRecommendationResult {
   storeCount: number;
 }
 
-/**
- * Queries market_price_comparisons for the user's latest data,
- * sums total basket cost per chain, returns chains ranked cheapest-first.
- */
-export async function getDailyPriceRecommendation(userId: string): Promise<DailyPriceRecommendationResult> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 2);
+const MAJOR_CHAINS = [
+  'שופרסל', 'רמי לוי', 'יינות ביתן', 'ביתן מרקט', 'ויקטורי',
+  'אושר עד', 'מחסני השוק', 'חצי חינם', 'יוחננוף', 'סופר פארם',
+  'טיב טעם', 'קרפור', 'מגה', 'שוק העיר', 'סטופ מרקט', 'יילו',
+];
 
-  const { data, error } = await supabase
-    .from('market_price_comparisons')
-    .select('item_name, chain_name, price, promo_price, promo_description, fetched_at')
-    .eq('local_user_id', userId)
-    .gte('fetched_at', cutoff.toISOString())
-    .order('fetched_at', { ascending: false });
+function isMajorChain(chainName: string): boolean {
+  const normalized = chainName.trim();
+  return MAJOR_CHAINS.some(
+    (major) => normalized === major || normalized.startsWith(major) || major.startsWith(normalized)
+  );
+}
 
-  if (error || !data?.length) {
-    return { recommendations: [], fetchedAt: null, coveredItems: 0, storeCount: 0 };
-  }
-
+function aggregateChainPrices(
+  data: Array<{ item_name: string; chain_name: string; price: number; promo_price: number | null; promo_description: string | null; fetched_at: string }>,
+  filterMajorChains: boolean,
+  maxChains?: number,
+): { recommendations: StoreRecommendation[]; fetchedAt: string; coveredItems: number } {
   const fetchedAt = data[0].fetched_at;
 
   const chainMap = new Map<string, { items: Map<string, MarketItemPrice>; total: number }>();
 
   for (const row of data) {
     const chain = row.chain_name;
+    if (filterMajorChains && !isMajorChain(chain)) continue;
+
     if (!chainMap.has(chain)) {
       chainMap.set(chain, { items: new Map(), total: 0 });
     }
@@ -744,7 +745,7 @@ export async function getDailyPriceRecommendation(userId: string): Promise<Daily
     }
   }
 
-  const recommendations: StoreRecommendation[] = Array.from(chainMap.entries())
+  let recommendations: StoreRecommendation[] = Array.from(chainMap.entries())
     .map(([chainName, { items, total }]) => ({
       chainName,
       totalBasketCost: Math.round(total * 100) / 100,
@@ -753,10 +754,88 @@ export async function getDailyPriceRecommendation(userId: string): Promise<Daily
     }))
     .sort((a, b) => a.totalBasketCost - b.totalBasketCost);
 
+  if (maxChains) {
+    recommendations = recommendations.slice(0, maxChains);
+  }
+
   return {
     recommendations,
     fetchedAt,
     coveredItems: new Set(data.map((row) => row.item_name)).size,
+  };
+}
+
+/**
+ * Queries market_price_comparisons for the user's latest data,
+ * filtered to major chains only, returns chains ranked cheapest-first.
+ */
+export async function getDailyPriceRecommendation(userId: string): Promise<DailyPriceRecommendationResult> {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 2);
+
+  const { data, error } = await supabase
+    .from('market_price_comparisons')
+    .select('item_name, chain_name, price, promo_price, promo_description, fetched_at')
+    .eq('local_user_id', userId)
+    .gte('fetched_at', cutoff.toISOString())
+    .order('fetched_at', { ascending: false });
+
+  if (error || !data?.length) {
+    return { recommendations: [], fetchedAt: null, coveredItems: 0, storeCount: 0 };
+  }
+
+  const { recommendations, fetchedAt, coveredItems } = aggregateChainPrices(data, true, 10);
+
+  return {
+    recommendations,
+    fetchedAt,
+    coveredItems,
+    storeCount: recommendations.length,
+  };
+}
+
+/**
+ * Like getDailyPriceRecommendation but filtered to specific item names
+ * from the user's current shopping list. Major chains only.
+ */
+export async function getDailyPriceRecommendationForList(
+  userId: string,
+  listItemNames: string[],
+): Promise<DailyPriceRecommendationResult> {
+  if (!listItemNames.length) {
+    return { recommendations: [], fetchedAt: null, coveredItems: 0, storeCount: 0 };
+  }
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 2);
+
+  const normalizedNames = listItemNames.map((n) => n.trim().toLowerCase());
+
+  const { data, error } = await supabase
+    .from('market_price_comparisons')
+    .select('item_name, chain_name, price, promo_price, promo_description, fetched_at')
+    .eq('local_user_id', userId)
+    .gte('fetched_at', cutoff.toISOString())
+    .order('fetched_at', { ascending: false });
+
+  if (error || !data?.length) {
+    return { recommendations: [], fetchedAt: null, coveredItems: 0, storeCount: 0 };
+  }
+
+  const filtered = data.filter((row) =>
+    normalizedNames.includes(row.item_name.trim().toLowerCase())
+  );
+
+  if (!filtered.length) {
+    return { recommendations: [], fetchedAt: null, coveredItems: 0, storeCount: 0 };
+  }
+
+  const { recommendations, fetchedAt, coveredItems } = aggregateChainPrices(filtered, true, 10);
+
+  return {
+    recommendations,
+    fetchedAt,
+    coveredItems,
     storeCount: recommendations.length,
   };
 }

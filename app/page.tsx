@@ -38,7 +38,7 @@ import { fetchLocalUsers, LocalUser } from '@/lib/localUsers';
 import { resolveItemDisplayInfo } from '@/lib/itemAliases';
 import { CATEGORIES } from '@/lib/categories';
 import { getItemAveragePrice, recordPrices } from '@/lib/itemPrices';
-import { getDailyPriceRecommendation, DailyPriceRecommendationResult } from '@/lib/analytics';
+import { getDailyPriceRecommendationForList, DailyPriceRecommendationResult } from '@/lib/analytics';
 import { GroceryItemRow } from '@/components/GroceryItemRow';
 
 export default function Home() {
@@ -110,7 +110,6 @@ export default function Home() {
   const [marketBanner, setMarketBanner] = useState<DailyPriceRecommendationResult | null>(null);
   const [marketBannerDismissed, setMarketBannerDismissed] = useState(false);
 
-  const loadMarketRecommendation = (userId: string) => getDailyPriceRecommendation(userId);
 
   // Load all item names for autocomplete from global catalog (shopping_items)
   // This is shared across all users for learning/suggestions
@@ -290,8 +289,13 @@ export default function Home() {
 
   useEffect(() => {
     if (!activeUserId) return;
+    const listNames = items.filter((i) => !i.purchased).map((i) => i.name);
+    if (!listNames.length) {
+      setMarketBanner(null);
+      return;
+    }
     let cancelled = false;
-    loadMarketRecommendation(activeUserId)
+    getDailyPriceRecommendationForList(activeUserId, listNames)
       .then((result) => {
         if (cancelled) return;
         setMarketBanner(result);
@@ -299,7 +303,7 @@ export default function Home() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [activeUserId]);
+  }, [activeUserId, items]);
 
   // Filter suggestions based on input
   useEffect(() => {
@@ -1839,7 +1843,7 @@ export default function Home() {
                             return (
                               <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 text-sm">
                                 <span className="text-emerald-700 dark:text-emerald-300 flex-1">
-                                  לפי המחירים, <strong>{cheapest.chainName}</strong> הכי זול היום (כ-₪{cheapest.totalBasketCost.toFixed(0)}).
+                                  לפי הרשימה שלך, <strong>{cheapest.chainName}</strong> הכי זול היום (כ-₪{cheapest.totalBasketCost.toFixed(0)} ל-{marketBanner.coveredItems} פריטים).
                                 </span>
                                 <button
                                   onClick={() => setMarketBannerDismissed(true)}
