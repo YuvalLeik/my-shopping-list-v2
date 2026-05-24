@@ -1,6 +1,6 @@
-﻿// Type definitions for the grocery list app
+// Type definitions for the grocery list app
 
-export type Category = 
+export type Category =
   | "Produce"
   | "Dairy"
   | "Meat"
@@ -16,22 +16,22 @@ export type SortOption = "A-Z" | "Category" | "Unpurchased first";
 
 // Hebrew translations
 export const CATEGORY_TRANSLATIONS: Record<Category, string> = {
-  "Produce": "╫ñ╫Ö╫¿╫ò╫¬ ╫ò╫Ö╫¿╫º╫ò╫¬",
-  "Dairy": "╫₧╫ò╫ª╫¿╫Ö ╫ù╫£╫æ",
-  "Meat": "╫æ╫⌐╫¿",
-  "Fish": "╫ô╫Æ╫Ö╫¥",
-  "Bakery": "╫₧╫É╫ñ╫Ö╫Ö╫ö",
-  "Pantry": "╫₧╫û╫ò╫ò╫ö",
-  "Frozen": "╫º╫ñ╫ò╫É╫Ö╫¥",
-  "Drinks": "╫₧╫⌐╫º╫É╫ò╫¬",
-  "Other": "╫É╫ù╫¿",
+  "Produce": "פירות וירקות",
+  "Dairy": "מוצרי חלב",
+  "Meat": "בשר",
+  "Fish": "דגים",
+  "Bakery": "מאפייה",
+  "Pantry": "מזווה",
+  "Frozen": "קפואים",
+  "Drinks": "משקאות",
+  "Other": "אחר",
   "": "",
 };
 
 export const SORT_OPTION_TRANSLATIONS: Record<SortOption, string> = {
-  "A-Z": "╫É-╫¬",
-  "Category": "╫º╫ÿ╫Æ╫ò╫¿╫Ö╫ö",
-  "Unpurchased first": "╫£╫É ╫á╫¿╫¢╫⌐ ╫º╫ò╫ô╫¥",
+  "A-Z": "א-ת",
+  "Category": "קטגוריה",
+  "Unpurchased first": "לא נרכש קודם",
 };
 
 export interface GroceryItem {
@@ -40,13 +40,12 @@ export interface GroceryItem {
   quantity: number;
   category: Category;
   purchased: boolean;
-  image?: string; // Base64 image data (optional)
+  image?: string;
 }
 
 export interface GroceryList {
-  date: string; // Format: YYYY-MM-DD
+  date: string;
   items: GroceryItem[];
   completed: boolean;
   completedAt?: string;
 }
-

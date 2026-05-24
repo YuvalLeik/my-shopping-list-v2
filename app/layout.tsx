@@ -14,13 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "╫¿╫⌐╫Ö╫₧╫¬ ╫º╫á╫Ö╫ò╫¬",
-  description: "╫É╫¿╫Æ╫ƒ ╫É╫¬ ╫ö╫º╫á╫Ö╫ò╫¬ ╫⌐╫£╫Ü ╫æ╫º╫£╫ò╫¬",
+  title: "רשימת קניות",
+  description: "ארגן את הקניות שלך בקלות",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "╫¿╫⌐╫Ö╫₧╫¬ ╫º╫á╫Ö╫ò╫¬",
+    title: "רשימת קניות",
   },
   icons: {
     apple: "/icon-192.png",

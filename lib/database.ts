@@ -2,12 +2,13 @@ import { supabase } from "./supabase";
 import { GroceryItem, GroceryList } from "@/app/types";
 
 const LOCAL_USER_KEY = "grocery_local_user_id";
+const DEFAULT_USER_ID = "01a6d46d-673f-4e2a-8956-a0fd0e00b23e";
 
 export function getUserIdSync(): string {
   if (typeof window === "undefined") return "";
   let id = localStorage.getItem(LOCAL_USER_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = DEFAULT_USER_ID;
     localStorage.setItem(LOCAL_USER_KEY, id);
   }
   return id;
