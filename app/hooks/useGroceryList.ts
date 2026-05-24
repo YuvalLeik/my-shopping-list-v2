@@ -377,6 +377,7 @@ export function useGroceryList(user: any) {
     updateQuantity,
     deleteItem,
     clearPurchased,
+    listId,
     completeList: handleCompleteList,
     deleteList: handleDeleteList,
     changeDate,

@@ -17,9 +17,11 @@ import HistoricalLists from "./components/HistoricalLists";
 import ViewListModal from "./components/ViewListModal";
 import ChatBot from "./components/ChatBot";
 import BottomNav from "./components/BottomNav";
+import Dashboard from "./components/Dashboard";
+import PriceEntryModal from "./components/PriceEntryModal";
 import { GroceryList } from "./types";
 
-type MobileTab = "list" | "history" | "suggestions";
+type MobileTab = "list" | "history" | "suggestions" | "dashboard";
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -36,6 +38,7 @@ export default function Home() {
   const [viewingList, setViewingList] = useState<GroceryList | null>(null);
   const [showChatBot, setShowChatBot] = useState(false);
   const [showDetailedForm, setShowDetailedForm] = useState(false);
+  const [showPriceModal, setShowPriceModal] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("list");
 
   useEffect(() => {
@@ -121,6 +124,15 @@ export default function Home() {
               onCompleteList={grocery.completeList}
             />
 
+            {grocery.items.length > 0 && (
+              <button
+                onClick={() => setShowPriceModal(true)}
+                className="mb-3 w-full rounded-xl border border-green-200 bg-green-50 py-2.5 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
+              >
+                הוסף מחירים לרשימה
+              </button>
+            )}
+
             <ItemList
               items={grocery.filteredAndSortedItems}
               totalItemCount={grocery.items.length}
@@ -200,13 +212,35 @@ export default function Home() {
               />
             </div>
           </div>
+
+          {/* Dashboard — mobile only tab */}
+          <div
+            className={`lg:hidden order-4 ${
+              mobileTab !== "dashboard" ? "hidden" : ""
+            }`}
+          >
+            <div className="mb-4">
+              <button
+                onClick={() => setShowPriceModal(true)}
+                disabled={grocery.items.length === 0}
+                className="w-full rounded-xl bg-green-600 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-40 shadow-sm"
+              >
+                הוסף מחירים לרשימה הנוכחית
+              </button>
+            </div>
+            <Dashboard
+              completedLists={grocery.completedLists}
+              currentItems={grocery.items}
+              onDeleteList={grocery.deleteList}
+            />
+          </div>
         </div>
       </div>
 
       {/* Mobile Bottom Nav */}
       <BottomNav
         activeTab={mobileTab}
-        onTabChange={setMobileTab}
+        onTabChange={(tab) => setMobileTab(tab as MobileTab)}
         itemCount={grocery.items.length}
         historyCount={grocery.completedLists.length}
         suggestionCount={smartSuggestions.suggestions.length}
@@ -218,6 +252,17 @@ export default function Home() {
           onClose={() => setViewingList(null)}
         />
       )}
+
+      <PriceEntryModal
+        isOpen={showPriceModal}
+        onClose={() => setShowPriceModal(false)}
+        items={grocery.items}
+        listId={grocery.listId}
+        onPricesApplied={() => {
+          grocery.loadData();
+          setShowPriceModal(false);
+        }}
+      />
 
       {showChatBot && (
         <ChatBot
