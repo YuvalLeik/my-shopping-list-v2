@@ -72,12 +72,32 @@ export default function Home() {
       <div className="grocery-bg" />
 
       <div className="relative z-10 mx-auto max-w-7xl">
+        {/* Desktop top tab bar */}
+        <div className="hidden lg:flex mb-4 gap-2 rounded-xl border border-gray-200 bg-white/95 p-1 shadow-sm">
+          {([
+            { id: "list", label: "רשימה" },
+            { id: "dashboard", label: "מחירים ודאשבורד" },
+          ] as { id: MobileTab; label: string }[]).map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setMobileTab(t.id)}
+              className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${
+                mobileTab === t.id || (t.id === "list" && mobileTab !== "dashboard")
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex flex-col lg:grid lg:grid-cols-4 gap-4 lg:gap-6">
           {/* Main Content — always visible on desktop, tab-controlled on mobile */}
           <div
             className={`lg:col-span-3 order-1 ${
               mobileTab !== "list" ? "hidden lg:block" : ""
-            }`}
+            } ${mobileTab === "dashboard" ? "lg:hidden" : ""}`}
           >
             <ListHeader
               currentDate={grocery.currentDate}
@@ -202,7 +222,7 @@ export default function Home() {
           <div
             className={`lg:col-span-1 order-3 lg:order-2 ${
               mobileTab !== "history" ? "hidden lg:block" : ""
-            }`}
+            } ${mobileTab === "dashboard" ? "lg:hidden" : ""}`}
           >
             <div className="sticky top-4 sm:top-8">
               <HistoricalLists
@@ -213,9 +233,9 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Dashboard — mobile only tab */}
+          {/* Dashboard — shown when dashboard tab active */}
           <div
-            className={`lg:hidden order-4 ${
+            className={`order-4 lg:col-span-4 ${
               mobileTab !== "dashboard" ? "hidden" : ""
             }`}
           >
