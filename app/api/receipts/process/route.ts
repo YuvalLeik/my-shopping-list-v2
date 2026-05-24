@@ -19,6 +19,7 @@ const EXTRACTION_PROMPT = `אתה מנתח קבלות סופרמרקט. הקלט
   "items": [
     {
       "name": "שם המוצר בעברית, מנוקה ממספרי מוצר/ברקודים",
+      "barcode": "מספר ברקוד (7-13 ספרות) אם מופיע ליד הפריט, אחרת null",
       "quantity": מספר (ברירת מחדל 1),
       "unit_price": מספר - מחיר ליחידה,
       "line_total": מספר - סך הכול עבור השורה
@@ -31,6 +32,7 @@ const EXTRACTION_PROMPT = `אתה מנתח קבלות סופרמרקט. הקלט
 - אם רואים "1 X 12.90" או "2X3.50" - quantity ו-unit_price בהתאם.
 - אם רק line_total ידוע, השאר unit_price כ-line_total/quantity.
 - ערכים מספריים תמיד כמספרים (לא מחרוזות).
+- ברקודים הם מספרים של 7-13 ספרות שמופיעים בדרך כלל ליד כל פריט בקבלה.
 - אם לא בטוח, החזר את הערך הקרוב ביותר; אל תשמיט שורה רק כי לא בטוח.
 - JSON בלבד. ללא הסברים.`;
 
@@ -119,20 +121,38 @@ export async function POST(request: NextRequest) {
       const total = typeof parsed.total === "number" ? parsed.total : null;
       const items = Array.isArray(parsed.items) ? parsed.items : [];
 
-      // Insert extracted lines
+      // Insert extracted lines + save barcodes
       if (items.length > 0) {
-        const linesPayload = items
-          .filter((i: any) => i && i.name)
-          .map((i: any) => ({
-            receipt_id: receiptId,
-            item_name: String(i.name),
-            normalized_name: String(i.name).toLowerCase().trim().replace(/\s+/g, " "),
-            quantity: typeof i.quantity === "number" ? i.quantity : 1,
-            unit_price: typeof i.unit_price === "number" ? i.unit_price : null,
-            line_total: typeof i.line_total === "number" ? i.line_total : null,
-          }));
+        const validItems = items.filter((i: any) => i && i.name);
+        const linesPayload = validItems.map((i: any) => ({
+          receipt_id: receiptId,
+          item_name: String(i.name),
+          normalized_name: String(i.name).toLowerCase().trim().replace(/\s+/g, " "),
+          quantity: typeof i.quantity === "number" ? i.quantity : 1,
+          unit_price: typeof i.unit_price === "number" ? i.unit_price : null,
+          line_total: typeof i.line_total === "number" ? i.line_total : null,
+        }));
         if (linesPayload.length > 0) {
           await supabase.from("receipt_lines").insert(linesPayload);
+        }
+
+        // Save barcode→name mappings for Cheapersal lookups
+        const barcodeItems = validItems.filter(
+          (i: any) => i.barcode && /^\d{7,13}$/.test(String(i.barcode))
+        );
+        for (const bi of barcodeItems) {
+          try {
+            await supabase.from("product_barcodes").upsert(
+              {
+                barcode: String(bi.barcode),
+                item_name: String(bi.name),
+                normalized_name: String(bi.name).toLowerCase().trim().replace(/\s+/g, " "),
+                local_user_id: local_user_id,
+                last_seen_at: new Date().toISOString(),
+              },
+              { onConflict: "barcode" }
+            );
+          } catch {}
         }
       }
 

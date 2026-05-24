@@ -81,7 +81,22 @@ CREATE INDEX IF NOT EXISTS idx_receipt_lines_receipt ON receipt_lines(receipt_id
 ALTER TABLE receipt_lines DISABLE ROW LEVEL SECURITY;
 
 -- =====================================================
--- 6. Migrate OLD price_memories rows (if they exist with user_id UUID auth column)
+-- 6. product_barcodes: maps barcodes to item names (learned from receipts)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS product_barcodes (
+  barcode TEXT PRIMARY KEY,
+  item_name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL,
+  local_user_id TEXT,
+  last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_barcodes_normalized ON product_barcodes(normalized_name);
+
+ALTER TABLE product_barcodes DISABLE ROW LEVEL SECURITY;
+
+-- =====================================================
+-- 7. Migrate OLD price_memories rows (if they exist with user_id UUID auth column)
 -- This silently does nothing if the old column doesn't exist.
 -- =====================================================
 DO $$

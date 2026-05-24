@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { GroceryList, GroceryItem } from "../types";
 import { getCheapestStoreComparison, getSpendingHistory, StoreComparison } from "@/lib/price-memory-local";
 import { formatDate } from "../lib/date-utils";
+import { supabase } from "@/lib/supabase";
+import { getUserIdSync } from "@/lib/database";
 import ViewListModal from "./ViewListModal";
 
 interface DashboardProps {
@@ -12,7 +14,18 @@ interface DashboardProps {
   onDeleteList: (list: GroceryList) => void;
 }
 
-type DashboardTab = "history" | "prices" | "chart";
+interface CheapersalPrice {
+  chain: string;
+  branch: string;
+  price: number;
+}
+
+interface CheapersalResult {
+  name: string;
+  prices: CheapersalPrice[];
+}
+
+type DashboardTab = "history" | "prices" | "chart" | "realtime";
 
 export default function Dashboard({
   completedLists,
@@ -26,6 +39,10 @@ export default function Dashboard({
   >([]);
   const [viewingList, setViewingList] = useState<GroceryList | null>(null);
   const [loadingPrices, setLoadingPrices] = useState(false);
+  const [realtimeResults, setRealtimeResults] = useState<Record<string, CheapersalResult>>({});
+  const [realtimeLoading, setRealtimeLoading] = useState(false);
+  const [realtimeError, setRealtimeError] = useState<string | null>(null);
+  const [knownBarcodes, setKnownBarcodes] = useState<{ barcode: string; item_name: string }[]>([]);
 
   useEffect(() => {
     if (activeTab === "prices" && currentItems.length > 0) {
@@ -43,6 +60,45 @@ export default function Dashboard({
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab === "realtime") {
+      const userId = getUserIdSync();
+      if (!userId) return;
+      const normalizedNames = currentItems.map((i) =>
+        i.name.toLowerCase().trim().replace(/\s+/g, " ")
+      );
+      supabase
+        .from("product_barcodes")
+        .select("barcode, item_name, normalized_name")
+        .in("normalized_name", normalizedNames.length > 0 ? normalizedNames : ["__none__"])
+        .then(({ data }) => {
+          const barcodes = data || [];
+          setKnownBarcodes(barcodes);
+          if (barcodes.length === 0) {
+            setRealtimeResults({});
+            return;
+          }
+          setRealtimeLoading(true);
+          setRealtimeError(null);
+          fetch("/api/cheapersal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "compare_prices",
+              barcodes: barcodes.map((b) => b.barcode),
+            }),
+          })
+            .then((res) => {
+              if (!res.ok) throw new Error("Cheapersal API failed");
+              return res.json();
+            })
+            .then((data) => setRealtimeResults(data.results || {}))
+            .catch((err) => setRealtimeError(err.message))
+            .finally(() => setRealtimeLoading(false));
+        });
+    }
+  }, [activeTab, currentItems]);
+
   const maxSpend = spendingHistory.reduce(
     (max, d) => Math.max(max, d.total),
     0
@@ -50,7 +106,8 @@ export default function Dashboard({
 
   const tabs: { id: DashboardTab; label: string }[] = [
     { id: "history", label: "היסטוריה" },
-    { id: "prices", label: "השוואת מחירים" },
+    { id: "prices", label: "מחירים שלי" },
+    { id: "realtime", label: "מחירי שוק" },
     { id: "chart", label: "גרף הוצאות" },
   ];
 
@@ -322,6 +379,92 @@ export default function Dashboard({
                 </div>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* Realtime market prices tab (Cheapersal) */}
+      {activeTab === "realtime" && (
+        <div className="rounded-xl border border-gray-200 bg-white/95 p-3 sm:p-4 shadow-lg">
+          <h3 className="mb-1 text-sm font-semibold text-gray-700">
+            מחירי שוק בזמן אמת
+          </h3>
+          <p className="mb-4 text-xs text-gray-400">
+            מחירים מ-Cheapersal (30+ רשתות). דורש ברקודים — מתמלאים אוטומטית מקבלות שסרקת.
+          </p>
+
+          {realtimeLoading ? (
+            <div className="py-6 text-center text-sm text-gray-400">
+              <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600 mb-2" />
+              <div>מחפש מחירים...</div>
+            </div>
+          ) : realtimeError ? (
+            <div className="py-4 text-center text-sm text-red-500">{realtimeError}</div>
+          ) : knownBarcodes.length === 0 ? (
+            <div className="py-8 text-center">
+              <div className="mb-2 text-3xl">🏷️</div>
+              <p className="text-sm text-gray-500">
+                אין ברקודים ידועים עדיין.
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                העלה קבלה דרך OCR — הברקודים יזוהו אוטומטית ויאפשרו השוואת מחירים בזמן אמת.
+              </p>
+            </div>
+          ) : Object.keys(realtimeResults).length === 0 ? (
+            <div className="py-8 text-center">
+              <div className="mb-2 text-3xl">📊</div>
+              <p className="text-sm text-gray-500">
+                נמצאו {knownBarcodes.length} ברקודים, אך לא נמצאו מחירים.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {Object.entries(realtimeResults).map(([barcode, result]) => {
+                const sortedPrices = [...result.prices].sort(
+                  (a, b) => a.price - b.price
+                );
+                const cheapest = sortedPrices[0];
+                return (
+                  <div
+                    key={barcode}
+                    className="rounded-xl border border-gray-200 bg-gray-50 p-3"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-sm text-gray-900">
+                        {result.name}
+                      </span>
+                      {cheapest && (
+                        <span className="text-sm font-bold text-green-700">
+                          מ-{cheapest.price.toFixed(2)}₪
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 mb-1">
+                      ברקוד: {barcode} · {sortedPrices.length} חנויות
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {sortedPrices.slice(0, 5).map((p, idx) => (
+                        <span
+                          key={idx}
+                          className={`inline-block rounded px-2 py-0.5 text-xs border ${
+                            idx === 0
+                              ? "border-green-200 bg-green-50 text-green-800 font-medium"
+                              : "border-gray-200 bg-white text-gray-600"
+                          }`}
+                        >
+                          {p.chain}: {p.price.toFixed(2)}₪
+                        </span>
+                      ))}
+                      {sortedPrices.length > 5 && (
+                        <span className="text-xs text-gray-400">
+                          +{sortedPrices.length - 5} עוד
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
