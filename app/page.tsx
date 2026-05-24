@@ -71,25 +71,34 @@ export default function Home() {
     <div className="relative min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-4 px-2 sm:py-8 sm:px-4 pb-20 lg:pb-4">
       <div className="grocery-bg" />
 
-      <div className="relative z-10 mx-auto max-w-7xl">
-        {/* Desktop top tab bar */}
-        <div className="hidden lg:flex mb-4 gap-2 rounded-xl border border-gray-200 bg-white/95 p-1 shadow-sm">
+      <div className="relative z-10 mx-auto max-w-6xl">
+        {/* Desktop top tab bar — elegant underline style */}
+        <div className="hidden lg:flex mb-6 items-center justify-center gap-8 border-b border-gray-200">
           {([
-            { id: "list", label: "רשימה" },
-            { id: "dashboard", label: "מחירים ודאשבורד" },
-          ] as { id: MobileTab; label: string }[]).map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setMobileTab(t.id)}
-              className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${
-                mobileTab === t.id || (t.id === "list" && mobileTab !== "dashboard")
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+            { id: "list", label: "רשימה", icon: "📝" },
+            { id: "dashboard", label: "מחירים ודאשבורד", icon: "📊" },
+          ] as { id: MobileTab; label: string; icon: string }[]).map((t) => {
+            const isActive =
+              mobileTab === t.id ||
+              (t.id === "list" && mobileTab !== "dashboard");
+            return (
+              <button
+                key={t.id}
+                onClick={() => setMobileTab(t.id)}
+                className={`relative px-4 py-3 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "text-blue-600"
+                    : "text-gray-500 hover:text-gray-800"
+                }`}
+              >
+                <span className="ml-1.5">{t.icon}</span>
+                {t.label}
+                {isActive && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t" />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex flex-col lg:grid lg:grid-cols-4 gap-4 lg:gap-6">

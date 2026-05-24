@@ -4,7 +4,11 @@ export const getTodayDate = () => {
 };
 
 export const formatDate = (dateString: string) => {
+  if (!dateString) return "ללא תאריך";
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) {
+    return dateString;
+  }
   return date.toLocaleDateString("he-IL", {
     day: "2-digit",
     month: "2-digit",

@@ -52,8 +52,13 @@ export default function HistoricalLists({
                   <div className="font-medium text-xs sm:text-sm text-gray-900 truncate">
                     {formatDate(list.date)}
                   </div>
-                  <div className="mt-0.5 sm:mt-1 text-xs text-gray-500">
-                    {list.items.length} פריטים
+                  <div className="mt-0.5 sm:mt-1 text-xs text-gray-500 flex items-center gap-2">
+                    <span>{list.items.length} פריטים</span>
+                    {(list as any).total_cost > 0 && (
+                      <span className="font-medium text-green-700">
+                        {(list as any).total_cost.toFixed(2)}₪
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 flex-shrink-0">
