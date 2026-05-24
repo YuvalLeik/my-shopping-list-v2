@@ -7,7 +7,7 @@ export const maxDuration = 60;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const geminiKey = process.env.GEMINI_API_KEY;
+const geminiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
 const EXTRACTION_PROMPT = `אתה מנתח קבלות סופרמרקט. הקלט הוא תמונה של קבלה (לרוב בעברית, מטבע ש"ח/ILS).
 החזר אך ורק JSON תקין במבנה הבא, ללא שום טקסט מסביב, ללא markdown:
