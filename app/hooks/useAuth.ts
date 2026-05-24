@@ -1,37 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
-import type { User } from "@supabase/supabase-js";
+import { useState, useEffect } from "react";
+import { getUserIdSync } from "@/lib/database";
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<{ id: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setUser(user);
-      setLoading(false);
-    };
-
-    checkUser();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    const id = getUserIdSync();
+    setUser({ id });
+    setLoading(false);
   }, []);
 
-  const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-  }, []);
-
-  return { user, loading, setUser, signOut };
+  return { user, loading, setUser, signOut: () => setUser(null) };
 }

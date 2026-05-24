@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { GroceryItem } from "@/app/types";
+import { getUserIdSync } from "./database";
 
 export interface ItemFrequency {
   item_name: string;
@@ -21,10 +22,7 @@ export interface SuggestedItem {
 }
 
 async function getUserId(): Promise<string | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user?.id || null;
+  return getUserIdSync() || null;
 }
 
 export async function updateItemFrequencies(

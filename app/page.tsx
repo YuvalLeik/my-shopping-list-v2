@@ -6,7 +6,6 @@ import { useGroceryList } from "./hooks/useGroceryList";
 import { useAutoComplete } from "./hooks/useAutoComplete";
 import { useSmartSuggestions } from "./hooks/useSmartSuggestions";
 import { useShoppingMode } from "./hooks/useShoppingMode";
-import Auth from "./components/Auth";
 import ListHeader from "./components/ListHeader";
 import QuickAddInput from "./components/QuickAddInput";
 import AddItemForm from "./components/AddItemForm";
@@ -23,7 +22,7 @@ import { GroceryList } from "./types";
 type MobileTab = "list" | "history" | "suggestions";
 
 export default function Home() {
-  const { user, loading, setUser, signOut } = useAuth();
+  const { user, loading } = useAuth();
   const grocery = useGroceryList(user);
   const { allItemNamesWithCategory, getSuggestions } = useAutoComplete(
     grocery.items,
@@ -51,10 +50,6 @@ export default function Home() {
         <div className="text-lg">טוען...</div>
       </div>
     );
-  }
-
-  if (!user) {
-    return <Auth onAuthSuccess={() => setUser({ id: "temp" } as any)} />;
   }
 
   if (shoppingMode.isShoppingMode && grocery.items.length > 0) {
@@ -86,7 +81,6 @@ export default function Home() {
               onChangeDate={grocery.changeDate}
               itemCount={grocery.items.length}
               onEnterShoppingMode={shoppingMode.toggleShoppingMode}
-              onSignOut={signOut}
             />
 
             <QuickAddInput

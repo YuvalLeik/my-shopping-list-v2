@@ -1,11 +1,21 @@
 import { supabase } from "./supabase";
 import { GroceryItem, GroceryList } from "@/app/types";
 
+const LOCAL_USER_KEY = "grocery_local_user_id";
+
+export function getUserIdSync(): string {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem(LOCAL_USER_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(LOCAL_USER_KEY, id);
+  }
+  return id;
+}
+
 export async function getUserId(): Promise<string | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user?.id || null;
+  const id = getUserIdSync();
+  return id || null;
 }
 
 // Get or create the active list for a given date, returns list ID
