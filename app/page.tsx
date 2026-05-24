@@ -19,6 +19,7 @@ import ChatBot from "./components/ChatBot";
 import BottomNav from "./components/BottomNav";
 import Dashboard from "./components/Dashboard";
 import PriceEntryModal from "./components/PriceEntryModal";
+import ReceiptUploadModal from "./components/ReceiptUploadModal";
 import { GroceryList } from "./types";
 
 type MobileTab = "list" | "history" | "suggestions" | "dashboard";
@@ -39,6 +40,7 @@ export default function Home() {
   const [showChatBot, setShowChatBot] = useState(false);
   const [showDetailedForm, setShowDetailedForm] = useState(false);
   const [showPriceModal, setShowPriceModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("list");
 
   useEffect(() => {
@@ -154,12 +156,20 @@ export default function Home() {
             />
 
             {grocery.items.length > 0 && (
-              <button
-                onClick={() => setShowPriceModal(true)}
-                className="mb-3 w-full rounded-xl border border-green-200 bg-green-50 py-2.5 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
-              >
-                הוסף מחירים לרשימה
-              </button>
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setShowReceiptModal(true)}
+                  className="rounded-xl border border-purple-200 bg-purple-50 py-2.5 text-sm font-medium text-purple-700 hover:bg-purple-100 transition-colors"
+                >
+                  📸 העלה קבלה (OCR)
+                </button>
+                <button
+                  onClick={() => setShowPriceModal(true)}
+                  className="rounded-xl border border-green-200 bg-green-50 py-2.5 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
+                >
+                  ✏️ הוסף מחירים ידנית
+                </button>
+              </div>
             )}
 
             <ItemList
@@ -248,13 +258,20 @@ export default function Home() {
               mobileTab !== "dashboard" ? "hidden" : ""
             }`}
           >
-            <div className="mb-4">
+            <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                onClick={() => setShowReceiptModal(true)}
+                disabled={grocery.items.length === 0}
+                className="rounded-xl bg-purple-600 py-3 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-40 shadow-sm"
+              >
+                📸 העלה קבלה — OCR אוטומטי
+              </button>
               <button
                 onClick={() => setShowPriceModal(true)}
                 disabled={grocery.items.length === 0}
-                className="w-full rounded-xl bg-green-600 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-40 shadow-sm"
+                className="rounded-xl bg-green-600 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-40 shadow-sm"
               >
-                הוסף מחירים לרשימה הנוכחית
+                ✏️ הוסף מחירים ידנית
               </button>
             </div>
             <Dashboard
@@ -290,6 +307,17 @@ export default function Home() {
         onPricesApplied={() => {
           grocery.loadData();
           setShowPriceModal(false);
+        }}
+      />
+
+      <ReceiptUploadModal
+        isOpen={showReceiptModal}
+        onClose={() => setShowReceiptModal(false)}
+        items={grocery.items}
+        listId={grocery.listId}
+        onPricesApplied={() => {
+          grocery.loadData();
+          setShowReceiptModal(false);
         }}
       />
 
