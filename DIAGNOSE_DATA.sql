@@ -1,51 +1,102 @@
--- Diagnostic queries — run these in Supabase SQL Editor to see what data exists.
--- Copy the OUTPUT and share it back so we know exactly what to restore.
+-- Robust diagnostic — each block is independent.
+-- Run in Supabase SQL Editor. Paste the output back.
+-- Each block prints its own "STATUS" rows so you can see what worked vs. didn't.
 
--- 1. Does price_memories table exist? What columns does it have?
-SELECT column_name, data_type, is_nullable
+-- =====================================================
+-- BLOCK A: list every table in your public schema
+-- =====================================================
+SELECT 'A: existing tables' AS check, table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+
+-- =====================================================
+-- BLOCK B: does price_memories exist? What columns?
+-- =====================================================
+SELECT 'B: price_memories columns' AS check, column_name, data_type
 FROM information_schema.columns
-WHERE table_name = 'price_memories'
+WHERE table_schema = 'public' AND table_name = 'price_memories'
 ORDER BY ordinal_position;
 
--- 2. How many price memory rows exist? Show first 10.
-SELECT COUNT(*) AS total_price_memories FROM price_memories;
-SELECT * FROM price_memories LIMIT 10;
+-- =====================================================
+-- BLOCK C: count rows in price_memories (safe — uses dynamic SQL)
+-- =====================================================
+DO $$
+DECLARE
+  cnt BIGINT;
+  has_user_id BOOLEAN;
+  has_local_user_id BOOLEAN;
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='price_memories') THEN
+    EXECUTE 'SELECT COUNT(*) FROM price_memories' INTO cnt;
+    RAISE NOTICE 'C: price_memories total rows = %', cnt;
 
--- 3. Distinct vendors in price_memories
-SELECT vendor_name, COUNT(*) AS items
-FROM price_memories
-GROUP BY vendor_name
-ORDER BY items DESC;
+    SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema='public' AND table_name='price_memories' AND column_name='user_id')
+      INTO has_user_id;
+    SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema='public' AND table_name='price_memories' AND column_name='local_user_id')
+      INTO has_local_user_id;
+    RAISE NOTICE 'C: has user_id column = %, has local_user_id column = %', has_user_id, has_local_user_id;
+  ELSE
+    RAISE NOTICE 'C: price_memories table does NOT exist yet';
+  END IF;
+END $$;
 
--- 4. Distinct user identifiers in price_memories (could be user_id OR local_user_id)
--- This errors if the column doesn't exist — that's the answer.
-SELECT DISTINCT user_id FROM price_memories LIMIT 20;
--- If above fails, try:
--- SELECT DISTINCT local_user_id FROM price_memories LIMIT 20;
+-- =====================================================
+-- BLOCK D: grocery_items — do price columns exist? Any rows with prices?
+-- =====================================================
+SELECT 'D: grocery_items price columns' AS check, column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'grocery_items'
+  AND column_name IN ('unit_price','line_total','vendor_name','price','store','store_name');
 
--- 5. Do grocery_items have any prices saved?
-SELECT COUNT(*) AS items_with_prices
-FROM grocery_items
-WHERE unit_price IS NOT NULL AND unit_price > 0;
+DO $$
+DECLARE
+  cnt BIGINT;
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='grocery_items' AND column_name='unit_price') THEN
+    EXECUTE 'SELECT COUNT(*) FROM grocery_items WHERE unit_price IS NOT NULL AND unit_price > 0' INTO cnt;
+    RAISE NOTICE 'D: grocery_items with unit_price > 0 = %', cnt;
+  ELSE
+    RAISE NOTICE 'D: grocery_items.unit_price column does NOT exist yet';
+  END IF;
+END $$;
 
-SELECT name, unit_price, vendor_name, list_id
-FROM grocery_items
-WHERE unit_price IS NOT NULL AND unit_price > 0
-LIMIT 20;
+-- =====================================================
+-- BLOCK E: grocery_lists — total_cost column? Any rows with totals?
+-- =====================================================
+SELECT 'E: grocery_lists columns' AS check, column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'grocery_lists'
+ORDER BY ordinal_position;
 
--- 6. Do grocery_lists have total_cost saved?
-SELECT COUNT(*) AS lists_with_total
-FROM grocery_lists
-WHERE total_cost IS NOT NULL AND total_cost > 0;
+DO $$
+DECLARE
+  cnt BIGINT;
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='grocery_lists' AND column_name='total_cost') THEN
+    EXECUTE 'SELECT COUNT(*) FROM grocery_lists WHERE total_cost IS NOT NULL AND total_cost > 0' INTO cnt;
+    RAISE NOTICE 'E: grocery_lists with total_cost > 0 = %', cnt;
+  ELSE
+    RAISE NOTICE 'E: grocery_lists.total_cost column does NOT exist yet';
+  END IF;
+END $$;
 
-SELECT title, total_cost, local_user_id, completed
-FROM grocery_lists
-WHERE total_cost IS NOT NULL AND total_cost > 0
-ORDER BY completed_at DESC NULLS LAST
-LIMIT 20;
-
--- 7. What user IDs exist in grocery_lists right now?
-SELECT local_user_id, COUNT(*) AS list_count
+-- =====================================================
+-- BLOCK F: which user IDs have data in grocery_lists?
+-- =====================================================
+SELECT 'F: lists per user' AS check, local_user_id, COUNT(*) AS list_count
 FROM grocery_lists
 GROUP BY local_user_id
 ORDER BY list_count DESC;
+
+-- =====================================================
+-- BLOCK G: receipts table?
+-- =====================================================
+SELECT 'G: receipts columns' AS check, column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'receipts'
+ORDER BY ordinal_position;
