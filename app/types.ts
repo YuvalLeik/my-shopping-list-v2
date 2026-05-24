@@ -41,6 +41,9 @@ export interface GroceryItem {
   category: Category;
   purchased: boolean;
   image?: string;
+  unit_price?: number | null;
+  line_total?: number | null;
+  vendor_name?: string | null;
 }
 
 export interface GroceryList {

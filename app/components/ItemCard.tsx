@@ -94,6 +94,19 @@ export default function ItemCard({
             {CATEGORY_TRANSLATIONS[item.category as Category]}
           </div>
         )}
+        {item.unit_price != null && item.unit_price > 0 && (
+          <div className="text-xs font-medium text-green-600 mt-0.5">
+            {item.unit_price.toFixed(2)}₪
+            {item.quantity > 1 && item.line_total != null && (
+              <span className="text-gray-400 font-normal">
+                {" "}(סה״כ {item.line_total.toFixed(2)}₪)
+              </span>
+            )}
+            {item.vendor_name && (
+              <span className="text-gray-400 font-normal"> · {item.vendor_name}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Quantity + Controls */}
