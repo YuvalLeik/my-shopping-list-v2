@@ -51,4 +51,5 @@ export interface GroceryList {
   items: GroceryItem[];
   completed: boolean;
   completedAt?: string;
+  total_cost?: number | null;
 }

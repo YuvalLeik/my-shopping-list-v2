@@ -158,9 +158,9 @@ export default function Dashboard({
                         </div>
                         <div className="mt-0.5 text-xs text-gray-500 flex items-center gap-2">
                           <span>{list.items.length} פריטים</span>
-                          {(list as any).total_cost > 0 && (
+                          {list.total_cost != null && list.total_cost > 0 && (
                             <span className="font-medium text-green-700">
-                              {(list as any).total_cost.toFixed(2)}₪
+                              {list.total_cost.toFixed(2)}₪
                             </span>
                           )}
                         </div>

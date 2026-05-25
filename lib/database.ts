@@ -64,6 +64,9 @@ export async function addItemToDb(
       category: item.category || null,
       purchased: item.purchased,
       image_url: item.image || null,
+      unit_price: item.unit_price ?? null,
+      line_total: item.line_total ?? null,
+      vendor_name: item.vendor_name ?? null,
     })
     .select("id")
     .single();
@@ -74,7 +77,7 @@ export async function addItemToDb(
 
 export async function updateItemInDb(
   itemId: string,
-  changes: Partial<Pick<GroceryItem, "name" | "quantity" | "category" | "purchased" | "image">>
+  changes: Partial<Pick<GroceryItem, "name" | "quantity" | "category" | "purchased" | "image" | "unit_price" | "line_total" | "vendor_name">>
 ): Promise<void> {
   const update: Record<string, any> = {};
   if (changes.name !== undefined) update.name = changes.name;
@@ -82,6 +85,9 @@ export async function updateItemInDb(
   if (changes.category !== undefined) update.category = changes.category || null;
   if (changes.purchased !== undefined) update.purchased = changes.purchased;
   if (changes.image !== undefined) update.image_url = changes.image || null;
+  if (changes.unit_price !== undefined) update.unit_price = changes.unit_price;
+  if (changes.line_total !== undefined) update.line_total = changes.line_total;
+  if (changes.vendor_name !== undefined) update.vendor_name = changes.vendor_name;
 
   const { error } = await supabase
     .from("grocery_items")
@@ -155,6 +161,9 @@ export async function saveGroceryList(
       category: item.category || null,
       purchased: item.purchased,
       image_url: item.image || null,
+      unit_price: item.unit_price ?? null,
+      line_total: item.line_total ?? null,
+      vendor_name: item.vendor_name ?? null,
     }));
 
     const { error } = await supabase
@@ -201,6 +210,9 @@ export async function loadGroceryList(
       category: item.category || "",
       purchased: item.purchased,
       image: item.image_url || undefined,
+      unit_price: item.unit_price ?? null,
+      line_total: item.line_total ?? null,
+      vendor_name: item.vendor_name ?? null,
     })),
     completed: list.completed,
     completedAt: list.completed_at || undefined,
@@ -240,6 +252,7 @@ export async function getCompletedLists(): Promise<GroceryList[]> {
 
   return lists.map((list: any) => ({
     date: list.title,
+    total_cost: list.total_cost ?? null,
     items: (list.grocery_items || [])
       .sort((a: any, b: any) => (a.created_at > b.created_at ? 1 : -1))
       .map((item: any) => ({
@@ -249,6 +262,9 @@ export async function getCompletedLists(): Promise<GroceryList[]> {
         category: item.category || "",
         purchased: item.purchased,
         image: item.image_url || undefined,
+        unit_price: item.unit_price ?? null,
+        line_total: item.line_total ?? null,
+        vendor_name: item.vendor_name ?? null,
       })),
     completed: list.completed,
     completedAt: list.completed_at || undefined,
