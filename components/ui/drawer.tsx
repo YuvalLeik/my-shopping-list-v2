@@ -31,7 +31,7 @@ const DrawerOverlay = React.forwardRef<
 DrawerOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 interface DrawerContentProps extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
-  side?: "left" | "right"
+  side?: "left" | "right" | "bottom"
 }
 
 const DrawerContent = React.forwardRef<
@@ -40,13 +40,23 @@ const DrawerContent = React.forwardRef<
 >(({ className, children, side = "right", ...props }, ref) => {
   // Determine slide direction based on side and RTL
   const isRTL = typeof document !== 'undefined' && document.documentElement.dir === 'rtl'
-  const actualSide = (side === "right" && !isRTL) || (side === "left" && isRTL) ? "right" : "left"
-  
+  const actualSide = side === "bottom"
+    ? "bottom"
+    : (side === "right" && !isRTL) || (side === "left" && isRTL) ? "right" : "left"
+
   // Position and animation classes based on side
-  const positionClass = actualSide === "right" ? "right-0 top-0" : "left-0 top-0"
-  const slideClasses = actualSide === "right"
-    ? "translate-x-full data-[state=open]:translate-x-0"
-    : "-translate-x-full data-[state=open]:translate-x-0"
+  const positionClass =
+    actualSide === "bottom" ? "bottom-0 left-0 right-0" :
+    actualSide === "right" ? "right-0 top-0" : "left-0 top-0"
+  const slideClasses =
+    actualSide === "bottom"
+      ? "translate-y-full data-[state=open]:translate-y-0"
+      : actualSide === "right"
+        ? "translate-x-full data-[state=open]:translate-x-0"
+        : "-translate-x-full data-[state=open]:translate-x-0"
+  const sizeClass = actualSide === "bottom"
+    ? "w-full max-h-[85vh] rounded-t-2xl"
+    : "h-full w-[280px]"
 
   return (
     <DrawerPortal>
@@ -54,7 +64,8 @@ const DrawerContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          "fixed z-[100] h-full w-[280px] gap-4 bg-white dark:bg-slate-900 p-0 shadow-lg transition-transform duration-300 ease-in-out",
+          "fixed z-[100] gap-4 bg-white dark:bg-slate-900 p-0 shadow-lg transition-transform duration-300 ease-in-out",
+          sizeClass,
           positionClass,
           slideClasses,
           className

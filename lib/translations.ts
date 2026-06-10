@@ -247,4 +247,19 @@ export const t = {
   promoLabel: 'מבצע',
   shopRecommendation: (chain: string, cost: number) => `לפי המחירים שלך, **${chain}** הכי זול היום (כ-₪${cost}).`,
   seeDetails: 'לפרטים',
+
+  // Storefront catalog (supermarket-style front page)
+  addToList: 'לרשימה',
+  allCategories: 'הכל',
+  searchCatalog: 'חיפוש מוצר...',
+  avgPaidPrice: 'מחיר ממוצע',
+  cheapestToday: 'הכי זול היום',
+  myCart: 'הרשימה שלי',
+  cartItemsCount: (n: number) => `${n} פריטים`,
+  estimatedTotal: 'סה״כ משוער',
+  openCart: 'פתח רשימה',
+  newItemCard: 'פריט חדש',
+  addNewItemNamed: (name: string) => `הוסף פריט חדש: "${name}"`,
+  noCatalogResults: 'לא נמצאו מוצרים',
+  catalogEmpty: 'הקטלוג שלך יתמלא אוטומטית מהרשימות והקבלות שלך',
 };

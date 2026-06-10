@@ -27,8 +27,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ShoppingCart, Plus, Trash2, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, User, Menu, Receipt, Settings2, Ban, Undo2 } from 'lucide-react';
+import { Loader2, ShoppingCart, Plus, Trash2, Minus, CheckCircle2, X, Bot, Camera, ChevronDown, User, Menu, Receipt, Settings2, Ban, Undo2, Search } from 'lucide-react';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { getCatalogWithMeta, CatalogEntry } from '@/lib/catalogView';
+import CategoryBar from '@/components/catalog/CategoryBar';
+import ProductGrid from '@/components/catalog/ProductGrid';
+import CartBar from '@/components/catalog/CartBar';
 import { Sidebar } from '@/components/Sidebar';
 import { AssistantPanel } from '@/app/components/AssistantPanel';
 import { ImportReceiptPanel } from '@/app/components/ImportReceiptPanel';
@@ -109,6 +114,15 @@ export default function Home() {
   const [purchaseDisplayInfo, setPurchaseDisplayInfo] = useState<Map<string, { canonicalName: string; imageUrl: string | null }>>(new Map());
   const [marketBanner, setMarketBanner] = useState<DailyPriceRecommendationResult | null>(null);
   const [marketBannerDismissed, setMarketBannerDismissed] = useState(false);
+  // Storefront catalog (supermarket-style front page)
+  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [catalogRefreshTrigger, setCatalogRefreshTrigger] = useState(0);
+  const [busyCatalogNames, setBusyCatalogNames] = useState<Set<string>>(new Set());
+  const [showAddItemDialog, setShowAddItemDialog] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
 
 
   // Load all item names for autocomplete from global catalog (shopping_items)
@@ -305,6 +319,21 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [activeUserId, items]);
 
+  // Load the storefront catalog (user's items + prices + frequency)
+  useEffect(() => {
+    if (!activeUserId) {
+      setCatalog([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingCatalog(true);
+    getCatalogWithMeta(activeUserId)
+      .then((entries) => { if (!cancelled) setCatalog(entries); })
+      .catch((err) => console.error('Failed to load catalog:', err))
+      .finally(() => { if (!cancelled) setLoadingCatalog(false); });
+    return () => { cancelled = true; };
+  }, [activeUserId, catalogRefreshTrigger]);
+
   // Filter suggestions based on input
   useEffect(() => {
     if (newItemName.trim().length > 0) {
@@ -483,6 +512,9 @@ export default function Home() {
       toast.success(t.itemAdded, {
         description: t.itemAddedDescription(newItem.name),
       });
+      setShowAddItemDialog(false);
+      // New item may not exist in the storefront catalog yet — refresh it
+      setCatalogRefreshTrigger((prev) => prev + 1);
     } catch (err) {
       toast.error('לא הצלחתי להוסיף לרשימה שלך', {
         description: err instanceof Error ? err.message : 'שגיאה לא ידועה',
@@ -935,6 +967,103 @@ export default function Home() {
     }
   };
 
+  // --- Storefront catalog handlers ---
+
+  const handleAddFromCatalog = async (entry: CatalogEntry) => {
+    if (!selectedListId || !activeUserId) return;
+    const norm = normalizeItemName(entry.name);
+    const existing = items.find((i) => normalizeItemName(i.name) === norm);
+    if (existing) {
+      await handleCatalogQuantityChange(existing, existing.quantity + 1);
+      return;
+    }
+    setBusyCatalogNames((prev) => new Set(prev).add(norm));
+    try {
+      const newItem = await createGroceryItem(
+        selectedListId,
+        entry.name,
+        1,
+        entry.category || 'ללא קטגוריה',
+        entry.image_url,
+        entry.avgPrice
+      );
+      setItems((prev) => [newItem, ...prev]);
+      toast.success(t.itemAdded, {
+        description: t.itemAddedDescription(newItem.name),
+        duration: 1500,
+      });
+    } catch (err) {
+      toast.error(t.failedToAddItem, {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setBusyCatalogNames((prev) => {
+        const next = new Set(prev);
+        next.delete(norm);
+        return next;
+      });
+    }
+  };
+
+  const handleCatalogQuantityChange = async (item: GroceryItem, newQuantity: number) => {
+    const target = Math.max(1, newQuantity);
+    if (target === item.quantity) return;
+    const norm = normalizeItemName(item.name);
+    setBusyCatalogNames((prev) => new Set(prev).add(norm));
+    try {
+      const updatedItem = await updateGroceryItem(item.id, { quantity: target });
+      setItems((prev) => [updatedItem, ...prev.filter((i) => i.id !== updatedItem.id)]);
+    } catch (err) {
+      toast.error(t.failedToAddItem, {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setBusyCatalogNames((prev) => {
+        const next = new Set(prev);
+        next.delete(norm);
+        return next;
+      });
+    }
+  };
+
+  const handleCatalogRemove = async (item: GroceryItem) => {
+    const norm = normalizeItemName(item.name);
+    setBusyCatalogNames((prev) => new Set(prev).add(norm));
+    try {
+      await handleDeleteItem(item.id);
+    } finally {
+      setBusyCatalogNames((prev) => {
+        const next = new Set(prev);
+        next.delete(norm);
+        return next;
+      });
+    }
+  };
+
+  const handleOpenAddItemDialog = (prefillName?: string) => {
+    if (prefillName) setNewItemName(prefillName);
+    setShowAddItemDialog(true);
+  };
+
+  // Derived storefront values
+  const inListByName = new Map<string, GroceryItem>();
+  for (const item of items) {
+    inListByName.set(normalizeItemName(item.name), item);
+  }
+  const categoryCounts = new Map<string, number>();
+  for (const entry of catalog) {
+    categoryCounts.set(entry.category, (categoryCounts.get(entry.category) ?? 0) + 1);
+  }
+  const normalizedCatalogSearch = catalogSearch.trim().toLowerCase();
+  const filteredCatalog = catalog.filter((entry) => {
+    if (categoryFilter && entry.category !== categoryFilter) return false;
+    if (normalizedCatalogSearch && !entry.name.toLowerCase().includes(normalizedCatalogSearch)) return false;
+    return true;
+  });
+  const cartEstimatedTotal = Math.round(
+    items.reduce((sum, item) => sum + (item.estimated_price ?? 0) * item.quantity, 0) * 100
+  ) / 100;
+
   // Reusable prior list Card content (desktop inline + mobile drawer)
   const previousListCardContent = (
     <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -1339,20 +1468,87 @@ export default function Home() {
           </div>
         </div>
 
-        <main className={`relative z-0 container mx-auto px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 max-w-5xl`}>
+        <main className={`relative z-0 container mx-auto px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 max-w-7xl pb-24 lg:pb-8`}>
 
-          <div className={`grid gap-6 grid-cols-1 ${(viewingPreviousListId || viewingStandalonePurchaseId) ? 'md:grid-cols-2' : ''}`}>
+          <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-6 lg:items-start">
             {/* Active List - Always shown */}
             {activeUserId && selectedListId && (
-              <div className="space-y-6">
-                {/* Add New Item Form */}
-                <Card ref={addItemFormRef} className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                  <CardHeader>
-                    <CardTitle className="text-lg text-slate-900 dark:text-slate-50 text-right">
-                      {t.addNewItem}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
+              <>
+              <div className="space-y-4 min-w-0">
+                {/* Previous list / standalone purchase view (desktop, above storefront) */}
+                {(viewingPreviousListId || viewingStandalonePurchaseId) && (
+                  <div className="hidden md:block">
+                    {viewingPreviousListId ? previousListCardContent : standalonePurchaseCardContent}
+                  </div>
+                )}
+
+                {/* Storefront: search + new item button */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute top-1/2 -translate-y-1/2 start-3 h-4 w-4 text-slate-400 pointer-events-none" />
+                    <Input
+                      type="text"
+                      value={catalogSearch}
+                      onChange={(e) => setCatalogSearch(e.target.value)}
+                      placeholder={t.searchCatalog}
+                      className="w-full h-11 rounded-full ps-9 text-right bg-white dark:bg-slate-800 shadow-sm"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleOpenAddItemDialog()}
+                    className="h-11 rounded-full flex-shrink-0"
+                  >
+                    <Plus className="h-4 w-4 me-1" />
+                    {t.newItemCard}
+                  </Button>
+                </div>
+
+                {/* Category icon bar */}
+                <CategoryBar selected={categoryFilter} counts={categoryCounts} onSelect={setCategoryFilter} />
+
+                {/* Product grid */}
+                {loadingCatalog && catalog.length === 0 ? (
+                  <div className="flex items-center justify-center py-16 text-slate-500 dark:text-slate-400">
+                    <Loader2 className="h-5 w-5 animate-spin me-2 text-emerald-600 dark:text-emerald-400" />
+                    <span>{t.loadingItems}</span>
+                  </div>
+                ) : (
+                  <ProductGrid
+                    entries={filteredCatalog}
+                    inListByName={inListByName}
+                    searchTerm={catalogSearch}
+                    busyNames={busyCatalogNames}
+                    onAdd={handleAddFromCatalog}
+                    onQuantityChange={handleCatalogQuantityChange}
+                    onRemove={handleCatalogRemove}
+                    onAddNewItem={(name) => handleOpenAddItemDialog(name)}
+                  />
+                )}
+              </div>
+
+              {/* Cart panel: desktop sticky column / mobile bottom sheet */}
+              <div
+                className={`fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-slate-50 dark:bg-slate-950 shadow-2xl transition-transform duration-300 ${cartOpen ? 'translate-y-0' : 'translate-y-full'} lg:sticky lg:top-24 lg:inset-x-auto lg:bottom-auto lg:z-0 lg:max-h-[calc(100vh-7rem)] lg:translate-y-0 lg:rounded-xl lg:shadow-none lg:bg-transparent lg:dark:bg-transparent`}
+              >
+                {/* Mobile-only cart header with close button */}
+                <div className="lg:hidden sticky top-0 z-10 flex items-center justify-between bg-slate-50 dark:bg-slate-950 px-4 py-2 border-b border-slate-200 dark:border-slate-800">
+                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t.myCart}</span>
+                  <button
+                    onClick={() => setCartOpen(false)}
+                    aria-label={t.cancel}
+                    className="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <X className="h-5 w-5 text-slate-500" />
+                  </button>
+                </div>
+                <div className="p-3 lg:p-0 space-y-6">
+                {/* Add New Item Dialog (opened from storefront "new item" button) */}
+                <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
+                  <DialogContent className="max-h-[90vh] overflow-y-auto" dir="rtl">
+                    <DialogHeader>
+                      <DialogTitle className="text-right">{t.addNewItem}</DialogTitle>
+                    </DialogHeader>
                     <form onSubmit={handleAddItem} className="space-y-3 sm:space-y-4">
                       {/* Item Name with Autocomplete */}
                       <div className="relative">
@@ -1573,8 +1769,8 @@ export default function Home() {
                         )}
                       </Button>
                     </form>
-                  </CardContent>
-                </Card>
+                  </DialogContent>
+                </Dialog>
 
                 {/* My List */}
                 <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -1677,7 +1873,7 @@ export default function Home() {
                           </p>
                           <div className="flex flex-col sm:flex-row gap-3 justify-center [dir=rtl]:flex-row-reverse">
                             <Button
-                              onClick={() => newItemNameInputRef.current?.focus()}
+                              onClick={() => { setCartOpen(false); handleOpenAddItemDialog(); }}
                               className="bg-emerald-600 hover:bg-emerald-700 text-white"
                             >
                               <Plus className="h-4 w-4 me-2" />
@@ -2018,15 +2214,9 @@ export default function Home() {
                   })()}
                   </CardContent>
                 </Card>
-
+                </div>
               </div>
-            )}
-
-            {/* Second column: Previous List or Standalone Purchase */}
-            {(viewingPreviousListId || viewingStandalonePurchaseId) && (
-              <div className="hidden md:block space-y-6">
-                {viewingPreviousListId ? previousListCardContent : standalonePurchaseCardContent}
-              </div>
+              </>
             )}
           </div>
 
@@ -2065,18 +2255,29 @@ export default function Home() {
         {/* Floating Action Button - Add item (Mobile only) */}
         {showFab && activeUserId && selectedListId && (
           <button
-            onClick={() => {
-              addItemFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              setTimeout(() => {
-                newItemNameInputRef.current?.focus();
-              }, 500);
-            }}
-            className="fixed z-50 w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center md:hidden right-6 [dir=rtl]:right-auto [dir=rtl]:left-6"
-            style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+            onClick={() => handleOpenAddItemDialog()}
+            className="fixed z-40 w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center md:hidden right-6 [dir=rtl]:right-auto [dir=rtl]:left-6"
+            style={{ bottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}
             aria-label="הוסף פריט"
           >
             <Plus className="h-6 w-6" />
           </button>
+        )}
+
+        {/* Mobile cart: dim overlay when open + bottom bar */}
+        {cartOpen && (
+          <div
+            className="lg:hidden fixed inset-0 z-40 bg-black/40"
+            onClick={() => setCartOpen(false)}
+            aria-hidden
+          />
+        )}
+        {activeUserId && selectedListId && !cartOpen && (
+          <CartBar
+            itemCount={items.length}
+            estimatedTotal={cartEstimatedTotal}
+            onOpen={() => setCartOpen(true)}
+          />
         )}
       </div>
 
@@ -2215,7 +2416,7 @@ export default function Home() {
               ? 'bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 scale-110' 
               : 'bg-gradient-to-br from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 hover:scale-110'
           }`}
-          style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+          style={{ bottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}
           size="lg"
           title={showAssistant ? "סגור עוזר קניות" : "פתח עוזר קניות"}
         >
@@ -2269,6 +2470,8 @@ export default function Home() {
               }
               const standalone = await fetchStandalonePurchaseRecords(activeUserId);
               setStandalonePurchases(standalone);
+              // Receipt items may introduce new catalog entries/prices
+              setCatalogRefreshTrigger((prev) => prev + 1);
             } catch {
               // Failed to reload
             }
