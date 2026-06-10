@@ -301,7 +301,7 @@ export default function Home() {
         setMarketBanner(result);
         setMarketBannerDismissed(false);
       })
-      .catch(() => {});
+      .catch((err) => console.error("Failed to load market price banner:", err));
     return () => { cancelled = true; };
   }, [activeUserId, items]);
 

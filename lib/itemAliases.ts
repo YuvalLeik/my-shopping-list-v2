@@ -624,7 +624,9 @@ export async function updatePersonalItemDetails(
   if (updates.imageUrl) shoppingUpdates.image_url = updates.imageUrl;
 
   if (Object.keys(shoppingUpdates).length > 0) {
-    forceUpdateShoppingItemByName(trimmed, shoppingUpdates).catch(() => {});
+    forceUpdateShoppingItemByName(trimmed, shoppingUpdates).catch((err) =>
+      console.error('Failed to sync catalog update to shopping_items:', err)
+    );
   }
 
   return catalogId;

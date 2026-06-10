@@ -1,32 +1,32 @@
-import { NextResponse } from 'next/server';
-import { createLocalUser, fetchLocalUsers } from '@/lib/localUsers';
+import { NextRequest, NextResponse } from 'next/server';
+import { createLocalUser } from '@/lib/localUsers';
 
-export async function GET() {
+// Utility endpoint for adding a family member profile.
+// Requires the CRON_SECRET so random visitors can't create users:
+//   GET /api/add-user?name=<user name>&secret=<CRON_SECRET>
+export async function GET(request: NextRequest) {
   try {
-    const userName = 'הלייקינים הגדולים';
-    
-    // Check if user already exists
-    const existingUsers = await fetchLocalUsers();
-    const existingUser = existingUsers.find(u => u.name === userName);
-    
-    if (existingUser) {
-      return NextResponse.json({
-        success: true,
-        message: 'User already exists',
-        user: {
-          id: existingUser.id,
-          name: existingUser.name,
-          created_at: existingUser.created_at,
-        },
-      });
+    const secret = request.nextUrl.searchParams.get('secret');
+    if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
-    
-    // Create new user
+
+    const userName = request.nextUrl.searchParams.get('name')?.trim();
+    if (!userName) {
+      return NextResponse.json(
+        { success: false, error: 'Missing "name" query parameter' },
+        { status: 400 }
+      );
+    }
+
+    // createLocalUser returns the existing user if the name is already taken
     const user = await createLocalUser(userName);
-    
+
     return NextResponse.json({
       success: true,
-      message: 'User created successfully',
       user: {
         id: user.id,
         name: user.name,
@@ -34,16 +34,12 @@ export async function GET() {
       },
     });
   } catch (error) {
-    if (error instanceof Error) {
-      return NextResponse.json({
+    return NextResponse.json(
+      {
         success: false,
-        error: error.message,
-      }, { status: 500 });
-    }
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Unknown error occurred',
-    }, { status: 500 });
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      },
+      { status: 500 }
+    );
   }
 }

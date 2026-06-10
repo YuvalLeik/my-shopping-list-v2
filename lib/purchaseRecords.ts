@@ -94,7 +94,9 @@ export async function createPurchaseRecord(input: CreatePurchaseRecordInput): Pr
     items = insertedItems || [];
     for (const item of input.items) {
       if (item.name?.trim()) {
-        upsertShoppingItemToCatalog(item.name.trim(), 'ללא קטגוריה').catch(() => {});
+        upsertShoppingItemToCatalog(item.name.trim(), 'ללא קטגוריה').catch((err) =>
+          console.error('Failed to sync receipt item to catalog:', err)
+        );
       }
     }
   }
@@ -261,7 +263,11 @@ export async function duplicatePurchaseToNewList(
     }
   }
 
-  itemsToInsert.forEach(i => upsertShoppingItemToCatalog(i.name, i.category).catch(() => {}));
+  itemsToInsert.forEach(i =>
+    upsertShoppingItemToCatalog(i.name, i.category).catch((err) =>
+      console.error('Failed to sync item to catalog:', err)
+    )
+  );
 
   return { listId: newList.id, itemCount: itemsToInsert.length };
 }
