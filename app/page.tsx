@@ -1385,8 +1385,9 @@ export default function Home() {
         }}
       />
 
-      {/* Main Content */}
-      <div className="flex-1 relative min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30 dark:from-slate-950 dark:to-slate-900">
+      {/* Main Content — min-w-0 lets this flex item shrink below its content's
+          min-content width (the category chip row), preventing page overflow on phones */}
+      <div className="flex-1 min-w-0 relative min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30 dark:from-slate-950 dark:to-slate-900">
         {/* Top Bar */}
         <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200/50 dark:border-slate-800/50 relative">
           {/* Mobile Hamburger Toggle Button - absolute positioning יחסית ל-top bar, מצד ימין למעלה */}
@@ -1402,14 +1403,15 @@ export default function Home() {
           
           <div className="container mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4">
             <div className="flex items-center justify-between gap-2 sm:gap-4">
-              {/* Right side - Title */}
+              {/* Right side - Title (hidden on phones: the user selector already
+                  identifies the user, and header height matters on small screens) */}
               <div className="flex-1 min-w-0">
-                <div className="text-right pr-10 md:pr-0">
-                  <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900 dark:text-slate-50">
+                <div className="hidden md:block text-right">
+                  <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-slate-50">
                     רשימות קניות
                   </h1>
                   {activeUserName && (
-                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5 sm:mt-1">
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                       משתמש: {activeUserName}
                     </p>
                   )}

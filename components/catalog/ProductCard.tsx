@@ -139,7 +139,7 @@ export default function ProductCard({
             variant="outline"
             disabled={busy}
             onClick={() => onAdd(entry)}
-            className="rounded-full border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 font-semibold"
+            className="h-10 rounded-full border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 font-semibold"
             aria-label={`הוסף ${entry.name} לרשימה`}
           >
             <Plus className="size-4" />
