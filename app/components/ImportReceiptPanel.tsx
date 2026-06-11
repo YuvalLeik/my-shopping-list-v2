@@ -59,6 +59,90 @@ export function ImportReceiptPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  // Long receipts are photographed in several overlapping close-up segments
+  // (top to bottom); all segments go to the OCR in one request and are merged.
+  const [photoSegments, setPhotoSegments] = useState<{ file: File; url: string }[]>([]);
+
+  useEffect(() => {
+    // Revoke preview object URLs on unmount
+    return () => {
+      photoSegments.forEach((s) => URL.revokeObjectURL(s.url));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handlePhotoSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setPhotoSegments((prev) => {
+      const next = [...prev, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))];
+      return next.slice(0, 6); // API cap
+    });
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  const removeSegment = (index: number) => {
+    setPhotoSegments((prev) => {
+      const seg = prev[index];
+      if (seg) URL.revokeObjectURL(seg.url);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const handleAnalyzeSegments = async () => {
+    if (photoSegments.length === 0) return;
+    setLoading(true);
+    setSource('photo_ocr');
+    try {
+      // Store the first segment as the receipt image (non-critical)
+      try {
+        const { publicUrl } = await uploadReceiptImage(photoSegments[0].file, userId);
+        setReceiptImageUrl(publicUrl);
+      } catch { /* continue without stored image */ }
+
+      const formData = new FormData();
+      for (const seg of photoSegments) {
+        formData.append('file', seg.file);
+      }
+      formData.append('userId', userId);
+
+      const res = await fetch('/api/receipt-parse', {
+        method: 'POST',
+        body: formData,
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Parse failed');
+
+      const data = json.data as ParsedReceipt & { rawText?: string; parserUsed?: string; parserError?: string };
+      setRawText(data.rawText || '');
+      setParsedStoreName(data.storeName || '');
+      setParsedDate(data.purchaseDate || '');
+      setParsedItems(data.items);
+      setParsedTotal(data.totalAmount != null ? String(data.totalAmount) : '');
+
+      if (data.parserUsed === 'regex' || data.parserUsed === 'vision_failed') {
+        toast.warning(t.receiptParserFallback, {
+          description: data.parserError || undefined,
+        });
+      }
+      if (data.items.length === 0) {
+        toast.info(t.receiptNoItemsFound);
+        setStep('parsed');
+      } else {
+        await runMatching(data.items, data.storeName || '');
+      }
+      // Success: release the segment previews
+      photoSegments.forEach((s) => URL.revokeObjectURL(s.url));
+      setPhotoSegments([]);
+    } catch (err) {
+      toast.error(t.receiptOcrFailed, {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const runMatching = async (items: ParsedItem[], storeName: string) => {
     setMatchingLoading(true);
     setStep('matching');
@@ -498,26 +582,71 @@ export function ImportReceiptPanel({
                 <p className="text-xs text-slate-500 dark:text-slate-400 text-right">
                   {t.receiptPhotoHelp}
                 </p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 text-right">
+                  💡 {t.receiptSegmentsTip}
+                </p>
                 <input
                   ref={photoInputRef}
                   type="file"
                   accept="image/*"
                   capture="environment"
-                  onChange={(e) => handleFileUpload(e, 'photo_ocr')}
+                  multiple
+                  onChange={handlePhotoSelected}
                   className="hidden"
                 />
-                <Button
-                  onClick={() => photoInputRef.current?.click()}
-                  disabled={loading}
-                  variant="outline"
-                  className="w-full"
-                >
-                  {loading ? (
-                    <><Loader2 className="h-4 w-4 animate-spin me-2" />{t.receiptOcrProcessing}</>
-                  ) : (
-                    <><Camera className="h-4 w-4 me-2" />{t.receiptTakePhoto}</>
+
+                {/* Captured segment strip */}
+                {photoSegments.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto py-1" dir="ltr">
+                    {photoSegments.map((seg, idx) => (
+                      <div key={seg.url} className="relative flex-shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={seg.url}
+                          alt={t.receiptSegmentLabel(idx + 1)}
+                          className="h-24 w-16 object-cover rounded-lg border border-slate-200 dark:border-slate-700"
+                        />
+                        <span className="absolute bottom-0.5 left-0.5 text-[10px] font-bold bg-black/60 text-white rounded px-1">
+                          {idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeSegment(idx)}
+                          disabled={loading}
+                          aria-label={t.delete}
+                          className="absolute -top-1.5 -right-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={loading || photoSegments.length >= 6}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    <Camera className="h-4 w-4 me-2" />
+                    {photoSegments.length === 0 ? t.receiptTakePhoto : t.receiptAddSegment}
+                  </Button>
+                  {photoSegments.length > 0 && (
+                    <Button
+                      onClick={handleAnalyzeSegments}
+                      disabled={loading}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      {loading ? (
+                        <><Loader2 className="h-4 w-4 animate-spin me-2" />{t.receiptOcrProcessing}</>
+                      ) : (
+                        t.receiptAnalyzeSegments(photoSegments.length)
+                      )}
+                    </Button>
                   )}
-                </Button>
+                </div>
               </div>
             )}
           </>

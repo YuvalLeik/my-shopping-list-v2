@@ -1,6 +1,8 @@
 import { parseReceipt, ParsedReceipt } from './receiptParser';
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+// gemini-2.0-flash was retired by Google (mid-2026); 2.5-flash is the
+// current stable multimodal model.
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 export type ParserMeta = {
   parserUsed: 'gemini' | 'regex' | 'vision_failed';
@@ -86,14 +88,31 @@ function cleanJsonResponse(text: string): string {
   return jsonStr;
 }
 
+export interface ReceiptImage {
+  base64: string;
+  mimeType: string;
+}
+
+/** Extra instruction when the receipt was photographed in several
+    overlapping close-up segments (long supermarket receipts). */
+function segmentNote(count: number): string {
+  if (count <= 1) return '';
+  return `
+
+IMPORTANT - MULTIPLE SEGMENTS: You are receiving ${count} photos that are sequential, slightly OVERLAPPING segments of ONE single receipt, ordered top to bottom. Merge them into ONE receipt:
+- Items that appear in the overlap between consecutive segments (same item name and price near the end of one photo and again near the start of the next) must appear only ONCE in the output.
+- storeName and purchaseDate usually appear in the first segment; totalAmount usually appears in the last segment.
+- Never duplicate items because of the overlap, and never drop items that appear in only one segment.`;
+}
+
 /**
- * Parse a receipt file (PDF or image) using Gemini multimodal vision.
- * Sends the raw file bytes so Gemini can see the visual layout.
+ * Parse a receipt (PDF or one-or-more image segments) using Gemini
+ * multimodal vision. Multiple images are treated as overlapping
+ * top-to-bottom segments of a single long receipt and merged.
  * Returns parserUsed and parserError on failure so the client can surface the error.
  */
 export async function parseReceiptMultimodal(
-  base64Data: string,
-  mimeType: string
+  images: ReceiptImage[]
 ): Promise<ParsedReceipt & ParserMeta> {
   const apiKey = getApiKey();
 
@@ -111,6 +130,10 @@ export async function parseReceiptMultimodal(
     return emptyWithError('Gemini API key not configured');
   }
 
+  if (!images.length) {
+    return emptyWithError('No images provided');
+  }
+
   try {
     const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
       method: 'POST',
@@ -119,13 +142,13 @@ export async function parseReceiptMultimodal(
         contents: [
           {
             parts: [
-              { text: SYSTEM_PROMPT },
-              {
+              { text: SYSTEM_PROMPT + segmentNote(images.length) },
+              ...images.map((img) => ({
                 inlineData: {
-                  mimeType,
-                  data: base64Data,
+                  mimeType: img.mimeType,
+                  data: img.base64,
                 },
-              },
+              })),
             ],
           },
         ],

@@ -23,18 +23,27 @@ export async function POST(request: NextRequest) {
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
-      const file = formData.get('file') as File | null;
-      if (!file) {
+      const files = formData
+        .getAll('file')
+        .filter((f): f is File => f instanceof File);
+      if (files.length === 0) {
         return NextResponse.json(
           { success: false, error: 'file is required' },
           { status: 400 }
         );
       }
+      if (files.length > 6) {
+        return NextResponse.json(
+          { success: false, error: 'Maximum 6 receipt segments per request' },
+          { status: 400 }
+        );
+      }
 
+      const file = files[0];
       const fileMime = file.type;
       const fileName = file.name.toLowerCase();
       const isPdf = fileMime === 'application/pdf' || fileName.endsWith('.pdf');
-      const isImage = isImageMime(fileMime);
+      const allImages = files.every((f) => isImageMime(f.type));
 
       if (isPdf) {
         const arrayBuffer = await file.arrayBuffer();
@@ -52,17 +61,25 @@ export async function POST(request: NextRequest) {
 
         // Scanned PDF with little/no extractable text -- try multimodal
         const base64 = buffer.toString('base64');
-        const parsed = await parseReceiptMultimodal(base64, 'application/pdf');
+        const parsed = await parseReceiptMultimodal([
+          { base64, mimeType: 'application/pdf' },
+        ]);
         return NextResponse.json({
           success: true,
           data: { ...parsed, rawText: rawText || '' },
         });
       }
 
-      if (isImage) {
-        const arrayBuffer = await file.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString('base64');
-        const parsed = await parseReceiptMultimodal(base64, fileMime);
+      if (allImages) {
+        // One or more photos; multiple = overlapping segments of one long
+        // receipt, merged by Gemini in a single multimodal request.
+        const images = await Promise.all(
+          files.map(async (f) => ({
+            base64: Buffer.from(await f.arrayBuffer()).toString('base64'),
+            mimeType: f.type,
+          }))
+        );
+        const parsed = await parseReceiptMultimodal(images);
         return NextResponse.json({
           success: true,
           data: { ...parsed, rawText: '' },

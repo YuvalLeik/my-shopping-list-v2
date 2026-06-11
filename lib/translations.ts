@@ -282,6 +282,12 @@ export const t = {
   cheapestHint: (chain: string, cost: number) => `${chain} הכי זול היום לסל שלך (כ-₪${cost})`,
   listMarkedReady: 'הרשימה סומנה כמוכנה לקנייה',
   listBackToBuilding: 'הרשימה חזרה למצב עריכה',
+
+  // Multi-segment receipt photos (long receipts)
+  receiptSegmentsTip: 'קבלה ארוכה? צלם אותה מקרוב חלק-חלק (מלמעלה למטה, עם חפיפה קטנה בין הצילומים) — המערכת תחבר אותם לקבלה אחת',
+  receiptAddSegment: 'הוסף חלק',
+  receiptAnalyzeSegments: (n: number) => n === 1 ? 'נתח קבלה' : `נתח קבלה (${n} חלקים)`,
+  receiptSegmentLabel: (n: number) => `חלק ${n}`,
   addNewItemNamed: (name: string) => `הוסף פריט חדש: "${name}"`,
   noCatalogResults: 'לא נמצאו מוצרים',
   catalogEmpty: 'הקטלוג שלך יתמלא אוטומטית מהרשימות והקבלות שלך',
