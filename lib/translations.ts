@@ -264,6 +264,11 @@ export const t = {
   basedOnCurrentList: (n: number) => `לפי הרשימה הנוכחית שלך (${n} פריטים)`,
   chainCoverage: (x: number, n: number) => `${x} מתוך ${n} פריטים`,
   noListForMarket: 'אין רשימה פעילה להשוואת מחירים',
+  fairBasketExplainer: (n: number) => `ההשוואה מחושבת על סל זהה של ${n} פריטים; מחיר חסר ברשת מוערך לפי ממוצע הרשתות (~)`,
+  realVsImputed: (real: number, imputed: number) =>
+    imputed > 0 ? `${real} מחירים אמיתיים · ${imputed} מוערכים` : `${real} מחירים אמיתיים`,
+  imputedPriceTooltip: 'מחיר מוערך (ממוצע הרשתות) — אין מחיר אמיתי לרשת זו',
+  lowCoverageChains: 'רשתות עם כיסוי חלקי — מוצגות אך לא מדורגות:',
   addNewItemNamed: (name: string) => `הוסף פריט חדש: "${name}"`,
   noCatalogResults: 'לא נמצאו מוצרים',
   catalogEmpty: 'הקטלוג שלך יתמלא אוטומטית מהרשימות והקבלות שלך',

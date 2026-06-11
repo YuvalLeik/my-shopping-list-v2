@@ -686,6 +686,9 @@ export interface MarketItemPrice {
   price: number;
   promoPrice: number | null;
   promoDescription: string | null;
+  /** True when this chain has no real price for the item and the
+      cross-chain average was used instead (fair-basket imputation). */
+  imputed?: boolean;
 }
 
 export interface StoreRecommendation {
@@ -693,6 +696,13 @@ export interface StoreRecommendation {
   totalBasketCost: number;
   itemCount: number;
   items: MarketItemPrice[];
+  /** Items priced with this chain's actual data */
+  realItemCount: number;
+  /** Items filled in with the cross-chain average price */
+  imputedItemCount: number;
+  /** True when the chain has real prices for less than half the basket —
+      shown separately and never crowned cheapest. */
+  isLowCoverage: boolean;
 }
 
 export interface DailyPriceRecommendationResult {
@@ -722,41 +732,94 @@ function aggregateChainPrices(
 ): { recommendations: StoreRecommendation[]; fetchedAt: string; coveredItems: number } {
   const fetchedAt = data[0].fetched_at;
 
-  const chainMap = new Map<string, { items: Map<string, MarketItemPrice>; total: number }>();
-
+  // Pass 1: collect each chain's real prices per item.
+  const chainMap = new Map<string, Map<string, MarketItemPrice>>();
   for (const row of data) {
     const chain = row.chain_name;
     if (filterMajorChains && !isMajorChain(chain)) continue;
 
-    if (!chainMap.has(chain)) {
-      chainMap.set(chain, { items: new Map(), total: 0 });
-    }
-    const entry = chainMap.get(chain)!;
-
-    if (!entry.items.has(row.item_name)) {
-      const effectivePrice = row.promo_price != null ? row.promo_price : row.price;
-      entry.items.set(row.item_name, {
+    if (!chainMap.has(chain)) chainMap.set(chain, new Map());
+    const items = chainMap.get(chain)!;
+    if (!items.has(row.item_name)) {
+      items.set(row.item_name, {
         itemName: row.item_name,
         price: Number(row.price),
         promoPrice: row.promo_price != null ? Number(row.promo_price) : null,
         promoDescription: row.promo_description,
       });
-      entry.total += Number(effectivePrice);
     }
   }
 
-  let recommendations: StoreRecommendation[] = Array.from(chainMap.entries())
-    .map(([chainName, { items, total }]) => ({
-      chainName,
-      totalBasketCost: Math.round(total * 100) / 100,
-      itemCount: items.size,
-      items: Array.from(items.values()),
-    }))
-    .sort((a, b) => a.totalBasketCost - b.totalBasketCost);
+  // Pass 2: the comparable basket = every covered item. Compute each item's
+  // average effective price across chains, used to fill chains' gaps so all
+  // totals price the SAME basket (apples to apples).
+  const effective = (p: MarketItemPrice) =>
+    p.promoPrice != null && p.promoPrice > 0 && p.promoPrice < p.price ? p.promoPrice : p.price;
 
-  if (maxChains) {
-    recommendations = recommendations.slice(0, maxChains);
+  const avgByItem = new Map<string, number>();
+  {
+    const sums = new Map<string, { sum: number; count: number }>();
+    for (const items of chainMap.values()) {
+      for (const [name, p] of items) {
+        const cur = sums.get(name) ?? { sum: 0, count: 0 };
+        cur.sum += effective(p);
+        cur.count += 1;
+        sums.set(name, cur);
+      }
+    }
+    for (const [name, { sum, count }] of sums) avgByItem.set(name, sum / count);
   }
+  const basket = Array.from(avgByItem.keys());
+  const rankThreshold = Math.ceil(basket.length * 0.5);
+
+  // Pass 3: per chain, price the full basket (real price or imputed average).
+  let recommendations: StoreRecommendation[] = Array.from(chainMap.entries()).map(
+    ([chainName, realItems]) => {
+      let total = 0;
+      const items: MarketItemPrice[] = basket.map((name) => {
+        const real = realItems.get(name);
+        if (real) {
+          total += effective(real);
+          return real;
+        }
+        const avg = avgByItem.get(name)!;
+        total += avg;
+        return {
+          itemName: name,
+          price: Math.round(avg * 100) / 100,
+          promoPrice: null,
+          promoDescription: null,
+          imputed: true,
+        };
+      });
+      const realItemCount = realItems.size;
+      return {
+        chainName,
+        totalBasketCost: Math.round(total * 100) / 100,
+        itemCount: realItemCount,
+        items,
+        realItemCount,
+        imputedItemCount: basket.length - realItemCount,
+        isLowCoverage: realItemCount < rankThreshold,
+      };
+    }
+  );
+
+  // Ranked chains first (cheapest comparable basket), then low-coverage
+  // chains (most real prices first) — those are shown but never ranked.
+  // The maxChains cap applies to the ranked group; low-coverage chains are
+  // appended separately (up to 5) so they stay visible for transparency.
+  const ranked = recommendations
+    .filter((r) => !r.isLowCoverage)
+    .sort((a, b) => a.totalBasketCost - b.totalBasketCost);
+  const lowCoverage = recommendations
+    .filter((r) => r.isLowCoverage)
+    .sort((a, b) => b.realItemCount - a.realItemCount || a.totalBasketCost - b.totalBasketCost);
+
+  recommendations = [
+    ...(maxChains ? ranked.slice(0, maxChains) : ranked),
+    ...lowCoverage.slice(0, 5),
+  ];
 
   return {
     recommendations,
@@ -809,7 +872,22 @@ export async function getDailyPriceRecommendationForList(
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 2);
 
-  const normalizedNames = listItemNames.map((n) => n.trim().toLowerCase());
+  // Soft name matching: list names and market names often differ slightly
+  // ("קוטג" vs "קוטג'", "גבינה לבנה" vs "גבינה לבנה 5% שומן 250 ג").
+  // Match on punctuation-stripped equality, or containment when the shorter
+  // name is specific enough (>= 4 chars) to avoid false positives.
+  const soften = (s: string) =>
+    s.toLowerCase().replace(/['"׳״`’.\-]/g, '').replace(/\s+/g, ' ').trim();
+  const softListNames = listItemNames.map(soften).filter(Boolean);
+  const matchesList = (marketName: string): boolean => {
+    const m = soften(marketName);
+    return softListNames.some((l) => {
+      if (l === m) return true;
+      const shorter = l.length <= m.length ? l : m;
+      const longer = l.length <= m.length ? m : l;
+      return shorter.length >= 4 && longer.includes(shorter);
+    });
+  };
 
   const { data, error } = await supabase
     .from('market_price_comparisons')
@@ -822,9 +900,7 @@ export async function getDailyPriceRecommendationForList(
     return { recommendations: [], fetchedAt: null, coveredItems: 0, storeCount: 0 };
   }
 
-  const filtered = data.filter((row) =>
-    normalizedNames.includes(row.item_name.trim().toLowerCase())
-  );
+  const filtered = data.filter((row) => matchesList(row.item_name));
 
   if (!filtered.length) {
     return { recommendations: [], fetchedAt: null, coveredItems: 0, storeCount: 0 };

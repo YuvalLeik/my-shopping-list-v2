@@ -2,7 +2,14 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getProductPrices } from '@/lib/cheapersal';
 
-const TOP_ITEMS_LIMIT = 15;
+// Items per run: the user's CURRENT list comes first (that's what the
+// where-to-shop comparison is about), then frequent historical items fill
+// the remaining budget. Total stays inside Cheapersal's ~100 req/day plan.
+const LIST_ITEMS_LIMIT = 40;
+const TOTAL_FETCH_BUDGET = 45;
+// New (unmapped) items resolved via Open Food Facts per run — spreads
+// resolution over days instead of hammering the API in one go.
+const RESOLVE_BUDGET_PER_RUN = 10;
 const STALE_DAYS = 2;
 
 export const dynamic = 'force-dynamic';
@@ -87,24 +94,58 @@ export async function GET(request: Request) {
 }
 
 async function processUser(userId: string): Promise<UserCronStats> {
+  // 1. The user's current (newest, non-completed) list — these items are what
+  //    the where-to-shop comparison needs, so they get priority.
+  const targetItems: string[] = [];
+  const seen = new Set<string>();
+  const pushUnique = (name: string) => {
+    const norm = normalizeItemName(name);
+    if (!norm || seen.has(norm)) return;
+    seen.add(norm);
+    targetItems.push(name.trim());
+  };
+
+  const { data: activeLists } = await supabase
+    .from('grocery_lists')
+    .select('id')
+    .eq('local_user_id', userId)
+    .is('completed_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (activeLists?.length) {
+    const { data: listItems } = await supabase
+      .from('grocery_items')
+      .select('name')
+      .eq('list_id', activeLists[0].id)
+      .limit(LIST_ITEMS_LIMIT);
+    for (const item of listItems || []) pushUnique(item.name);
+  }
+
+  // 2. Fill the remaining budget with the most frequently purchased items.
   const { data: priceRows } = await supabase
     .from('item_prices')
     .select('item_name')
     .eq('local_user_id', userId);
 
-  if (!priceRows?.length) {
+  if (priceRows?.length) {
+    const countMap = new Map<string, number>();
+    for (const row of priceRows) {
+      countMap.set(row.item_name, (countMap.get(row.item_name) || 0) + 1);
+    }
+    const frequent = Array.from(countMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name);
+    for (const name of frequent) {
+      if (targetItems.length >= TOTAL_FETCH_BUDGET) break;
+      pushUnique(name);
+    }
+  }
+
+  const topItems = targetItems.slice(0, TOTAL_FETCH_BUDGET);
+  if (topItems.length === 0) {
     return { userId, topItems: 0, mappedItems: 0, autoResolved: 0, unmappedItems: [], insertedRows: 0 };
   }
-
-  const countMap = new Map<string, number>();
-  for (const row of priceRows) {
-    countMap.set(row.item_name, (countMap.get(row.item_name) || 0) + 1);
-  }
-
-  const topItems = Array.from(countMap.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, TOP_ITEMS_LIMIT)
-    .map(([name]) => name);
 
   const normalizedTopItems = topItems.map(normalizeItemName);
   const { data: mappings } = await supabase
@@ -122,11 +163,13 @@ async function processUser(userId: string): Promise<UserCronStats> {
   const unmappedItems: string[] = [];
   let autoResolved = 0;
 
+  let resolveAttempts = 0;
   for (const itemName of topItems) {
     const normalized = normalizeItemName(itemName);
     let barcode: string | undefined = barcodeMap.get(normalized);
 
-    if (!barcode) {
+    if (!barcode && resolveAttempts < RESOLVE_BUDGET_PER_RUN) {
+      resolveAttempts++;
       barcode = (await autoResolveBarcode(itemName)) ?? undefined;
       if (barcode) {
         autoResolved++;

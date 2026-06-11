@@ -319,66 +319,103 @@ export function Dashboard({ userId }: DashboardProps) {
                 כיסוי נתוני מחירים: {marketRec.coveredItems} מתוך {currentListSize || marketRec.coveredItems} פריטים, ב-{marketRec.storeCount} רשתות
               </p>
             )}
+            {marketRec.coveredItems > 0 && (
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                {t.fairBasketExplainer(marketRec.coveredItems)}
+              </p>
+            )}
           </CardHeader>
           <CardContent className="pt-0 space-y-2">
-            {marketRec.recommendations.map((rec: StoreRecommendation, index: number) => {
-              const isCheapest = index === 0;
-              const isExpanded = expandedChain === rec.chainName;
-              return (
-                <div
-                  key={rec.chainName}
-                  className={`rounded-lg border p-3 transition-colors ${isCheapest
-                    ? 'border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-900/30'
-                    : 'border-slate-200 dark:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-slate-500 w-5 text-center">{index + 1}</span>
-                    <span className="flex-1 text-sm font-medium text-slate-800 dark:text-slate-200">
-                      {rec.chainName}
-                    </span>
-                    {isCheapest && (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500 text-white">
-                        {t.cheapestChain}
-                      </span>
-                    )}
-                    <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      ₪{rec.totalBasketCost.toFixed(0)}
-                    </span>
-                    <button
-                      onClick={() => setExpandedChain(isExpanded ? null : rec.chainName)}
-                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                    >
-                      {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-400 mr-7">
-                    {currentListSize > 0 ? t.chainCoverage(rec.itemCount, currentListSize) : t.marketItemCount(rec.itemCount)}
-                  </p>
+            {(() => {
+              const ranked = marketRec.recommendations.filter((r) => !r.isLowCoverage);
+              const lowCoverage = marketRec.recommendations.filter((r) => r.isLowCoverage);
 
-                  {isExpanded && (
-                    <div className="mt-2 mr-7 space-y-1 border-t border-slate-200 dark:border-slate-700 pt-2">
-                      {rec.items.map((item) => (
-                        <div key={item.itemName} className="flex items-center text-xs gap-1.5">
-                          <span className="flex-1 text-slate-600 dark:text-slate-400">{item.itemName}</span>
-                          {item.promoPrice != null ? (
-                            <>
-                              <span className="line-through text-slate-400">₪{item.price.toFixed(2)}</span>
-                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">₪{item.promoPrice.toFixed(2)}</span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 flex items-center gap-0.5">
-                                <Tag className="h-2.5 w-2.5" />{t.promoLabel}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="font-medium text-slate-700 dark:text-slate-300">₪{item.price.toFixed(2)}</span>
-                          )}
-                        </div>
-                      ))}
+              const renderChainRow = (rec: StoreRecommendation, index: number, isRanked: boolean) => {
+                const isCheapest = isRanked && index === 0;
+                const isExpanded = expandedChain === rec.chainName;
+                return (
+                  <div
+                    key={rec.chainName}
+                    className={`rounded-lg border p-3 transition-colors ${isCheapest
+                      ? 'border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-900/30'
+                      : isRanked
+                        ? 'border-slate-200 dark:border-slate-700'
+                        : 'border-slate-200/70 dark:border-slate-700/50 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-500 w-5 text-center">
+                        {isRanked ? index + 1 : '—'}
+                      </span>
+                      <span className="flex-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                        {rec.chainName}
+                      </span>
+                      {isCheapest && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500 text-white">
+                          {t.cheapestChain}
+                        </span>
+                      )}
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {rec.imputedItemCount > 0 ? '~' : ''}₪{rec.totalBasketCost.toFixed(0)}
+                      </span>
+                      <button
+                        onClick={() => setExpandedChain(isExpanded ? null : rec.chainName)}
+                        className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      >
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </button>
                     </div>
+                    <p className="text-xs text-slate-400 mr-7">
+                      {t.realVsImputed(rec.realItemCount, rec.imputedItemCount)}
+                    </p>
+
+                    {isExpanded && (
+                      <div className="mt-2 mr-7 space-y-1 border-t border-slate-200 dark:border-slate-700 pt-2">
+                        {rec.items.map((item) => (
+                          <div key={item.itemName} className="flex items-center text-xs gap-1.5">
+                            <span className={`flex-1 ${item.imputed ? 'text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>
+                              {item.itemName}
+                            </span>
+                            {item.imputed ? (
+                              <span
+                                className="text-slate-400 dark:text-slate-500 italic"
+                                title={t.imputedPriceTooltip}
+                              >
+                                ~₪{item.price.toFixed(2)}
+                              </span>
+                            ) : item.promoPrice != null ? (
+                              <>
+                                <span className="line-through text-slate-400">₪{item.price.toFixed(2)}</span>
+                                <span className="font-semibold text-emerald-600 dark:text-emerald-400">₪{item.promoPrice.toFixed(2)}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 flex items-center gap-0.5">
+                                  <Tag className="h-2.5 w-2.5" />{t.promoLabel}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="font-medium text-slate-700 dark:text-slate-300">₪{item.price.toFixed(2)}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
+              return (
+                <>
+                  {ranked.map((rec, i) => renderChainRow(rec, i, true))}
+                  {lowCoverage.length > 0 && (
+                    <>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-200 dark:border-slate-700">
+                        {t.lowCoverageChains}
+                      </p>
+                      {lowCoverage.map((rec, i) => renderChainRow(rec, i, false))}
+                    </>
                   )}
-                </div>
+                </>
               );
-            })}
+            })()}
           </CardContent>
         </Card>
       )}
