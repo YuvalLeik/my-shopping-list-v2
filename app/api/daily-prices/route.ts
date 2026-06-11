@@ -163,32 +163,49 @@ async function processUser(userId: string): Promise<UserCronStats> {
   const unmappedItems: string[] = [];
   let autoResolved = 0;
 
-  let resolveAttempts = 0;
+  // Split into already-mapped and unmapped items.
+  const unmappedCandidates: string[] = [];
   for (const itemName of topItems) {
     const normalized = normalizeItemName(itemName);
-    let barcode: string | undefined = barcodeMap.get(normalized);
-
-    if (!barcode && resolveAttempts < RESOLVE_BUDGET_PER_RUN) {
-      resolveAttempts++;
-      barcode = (await autoResolveBarcode(itemName)) ?? undefined;
-      if (barcode) {
-        autoResolved++;
-        await supabase.from('user_item_barcodes').upsert({
-          local_user_id: userId,
-          item_name: itemName,
-          item_name_normalized: normalized,
-          barcode,
-          source: 'auto-openfoodfacts',
-        }, { onConflict: 'local_user_id,item_name_normalized' });
-      }
+    const barcode = barcodeMap.get(normalized);
+    if (barcode) {
+      mappedItems.push({ itemName, barcode });
+    } else {
+      unmappedCandidates.push(itemName);
     }
-
-    if (!barcode) {
-      unmappedItems.push(itemName);
-      continue;
-    }
-    mappedItems.push({ itemName, barcode });
   }
+
+  // Rotate the resolution window by day so a batch of unresolvable names
+  // doesn't permanently block the rest from ever being attempted.
+  const dayIndex = Math.floor(Date.now() / 86_400_000);
+  const offset = unmappedCandidates.length > 0
+    ? (dayIndex * RESOLVE_BUDGET_PER_RUN) % unmappedCandidates.length
+    : 0;
+  const rotated = [
+    ...unmappedCandidates.slice(offset),
+    ...unmappedCandidates.slice(0, offset),
+  ];
+  const toResolve = rotated.slice(0, RESOLVE_BUDGET_PER_RUN);
+  const skipResolution = new Set(rotated.slice(RESOLVE_BUDGET_PER_RUN));
+
+  for (const itemName of toResolve) {
+    const normalized = normalizeItemName(itemName);
+    const barcode = (await autoResolveBarcode(itemName)) ?? undefined;
+    if (barcode) {
+      autoResolved++;
+      await supabase.from('user_item_barcodes').upsert({
+        local_user_id: userId,
+        item_name: itemName,
+        item_name_normalized: normalized,
+        barcode,
+        source: 'auto-openfoodfacts',
+      }, { onConflict: 'local_user_id,item_name_normalized' });
+      mappedItems.push({ itemName, barcode });
+    } else {
+      unmappedItems.push(itemName);
+    }
+  }
+  unmappedItems.push(...skipResolution);
 
   const rows: Array<{
     local_user_id: string;

@@ -13,6 +13,7 @@ import { matchReceiptItems, upsertAlias, MatchedItem, getUserPersonalItems, Pers
 import { recordPrices } from '@/lib/itemPrices';
 import { autoMatchPurchaseToGroceryItems } from '@/lib/purchaseRecords';
 import { uploadReceiptImage } from '@/lib/storage';
+import { upsertUserItemBarcode } from '@/lib/userItemBarcodes';
 
 interface ImportReceiptPanelProps {
   userId: string;
@@ -245,6 +246,20 @@ export function ImportReceiptPanel({
             await upsertAlias(userId, m.originalName, m.matchedCanonicalName, parsedStoreName || null);
           } catch { /* ignore alias save failure */ }
         }
+      }
+
+      // Learn barcodes printed on the receipt — these enable real market
+      // price comparisons (Cheapersal is barcode-based). Map the barcode to
+      // the canonical item name so it matches list items.
+      for (let i = 0; i < parsedItems.length; i++) {
+        const barcode = parsedItems[i]?.barcode;
+        if (!barcode) continue;
+        const canonicalName =
+          (matchedItems.length === parsedItems.length && matchedItems[i]?.matchedCanonicalName) ||
+          parsedItems[i].name;
+        try {
+          await upsertUserItemBarcode(userId, canonicalName, barcode, 'receipt');
+        } catch { /* non-critical */ }
       }
 
       // Record prices for all items that have price data

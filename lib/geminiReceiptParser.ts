@@ -18,7 +18,8 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation, n
       "name": "item name in Hebrew",
       "quantity": 1,
       "unitPrice": 5.90,
-      "totalPrice": 5.90
+      "totalPrice": 5.90,
+      "barcode": "7290000000000"
     }
   ],
   "totalAmount": 123.45
@@ -29,6 +30,7 @@ Rules:
 - For weight items (e.g. "0.532 ק"ג X 12.90"), calculate quantity as the weight and unitPrice as price per kg
 - Ignore discount lines (הנחה), but if a discount applies to a specific item, subtract it from that item's totalPrice
 - Ignore VAT (מע"מ), payment method lines, change lines
+- "barcode": the product's numeric barcode (7-13 digits, usually starting with 729 for Israeli products) printed on the SAME line as the item or right next to it. Israeli receipts often print it before/after the item name. If no per-item barcode is visible, use null. Do NOT invent barcodes.
 
 CRITICAL - Ignore all of the following (these are NOT items):
 - Delivery addresses, street names, apartment/floor info (e.g. "ז'בוטינסקי 7 קומה:.")
@@ -36,7 +38,7 @@ CRITICAL - Ignore all of the following (these are NOT items):
 - Phone numbers, email addresses, customer names
 - Order numbers, transaction IDs, reference numbers
 - Branch info, cashier info, register numbers
-- Headers, footers, logos, barcodes
+- Headers, footers, logos, barcode GRAPHICS at the bottom of the receipt (per-item numeric codes ARE wanted)
 - Delivery time slots, shipping details
 - Terms and conditions, return policy text
 
@@ -61,12 +63,16 @@ function validateAndNormalize(parsed: Record<string, unknown>): ParsedReceipt {
   if (Array.isArray(parsed.items)) {
     result.items = parsed.items
       .filter((item: Record<string, unknown>) => item && typeof item.name === 'string' && item.name.trim())
-      .map((item: Record<string, unknown>) => ({
-        name: String(item.name).trim(),
-        quantity: typeof item.quantity === 'number' ? item.quantity : 1,
-        unitPrice: typeof item.unitPrice === 'number' ? item.unitPrice : null,
-        totalPrice: typeof item.totalPrice === 'number' ? item.totalPrice : null,
-      }));
+      .map((item: Record<string, unknown>) => {
+        const rawBarcode = typeof item.barcode === 'string' ? item.barcode.trim() : '';
+        return {
+          name: String(item.name).trim(),
+          quantity: typeof item.quantity === 'number' ? item.quantity : 1,
+          unitPrice: typeof item.unitPrice === 'number' ? item.unitPrice : null,
+          totalPrice: typeof item.totalPrice === 'number' ? item.totalPrice : null,
+          barcode: /^\d{7,13}$/.test(rawBarcode) ? rawBarcode : null,
+        };
+      });
   }
 
   return result;

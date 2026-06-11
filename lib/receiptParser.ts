@@ -9,6 +9,8 @@ export interface ParsedItem {
   quantity: number;
   unitPrice: number | null;
   totalPrice: number | null;
+  /** EAN/UPC product barcode printed next to the line (7-13 digits), when present */
+  barcode?: string | null;
 }
 
 export interface ParsedReceipt {
