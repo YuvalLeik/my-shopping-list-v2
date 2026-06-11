@@ -1572,6 +1572,17 @@ export default function Home() {
                   )}
                 </div>
 
+                {/* Mobile dim overlay — must be a sibling of the cart sheet inside
+                    the same stacking context (<main> is `relative z-0`), otherwise
+                    it paints above the sheet and swallows touch scrolling */}
+                {cartOpen && (
+                  <div
+                    className="lg:hidden fixed inset-0 z-40 bg-black/40"
+                    onClick={() => setCartOpen(false)}
+                    aria-hidden
+                  />
+                )}
+
                 {/* Cart panel: desktop scrolling column / mobile bottom sheet */}
                 <div
                   className={`fixed inset-x-0 bottom-0 z-50 flex flex-col max-h-[85vh] rounded-t-2xl bg-slate-50 dark:bg-slate-950 shadow-2xl transition-transform duration-300 ${cartOpen ? 'translate-y-0' : 'translate-y-full'} lg:static lg:z-0 lg:flex lg:w-[380px] lg:shrink-0 lg:max-h-none lg:h-full lg:translate-y-0 lg:rounded-xl lg:shadow-none lg:bg-transparent lg:dark:bg-transparent`}
@@ -1587,7 +1598,10 @@ export default function Home() {
                     <X className="h-5 w-5 text-slate-500" />
                   </button>
                 </div>
-                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 lg:p-0 lg:pb-6 space-y-6">
+                <div
+                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y p-3 lg:p-0 lg:pb-6 space-y-6"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
+                >
                 {/* Add New Item Dialog (opened from storefront "new item" button) */}
                 <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
                   <DialogContent className="max-h-[90vh] overflow-y-auto" dir="rtl">
@@ -2314,14 +2328,8 @@ export default function Home() {
           </button>
         )}
 
-        {/* Mobile cart: dim overlay when open + bottom bar */}
-        {cartOpen && (
-          <div
-            className="lg:hidden fixed inset-0 z-40 bg-black/40"
-            onClick={() => setCartOpen(false)}
-            aria-hidden
-          />
-        )}
+        {/* Mobile cart bottom bar (the dim overlay lives next to the cart sheet
+            inside <main> so they share one stacking context — see content row) */}
         {activeUserId && selectedListId && !cartOpen && (
           <CartBar
             itemCount={items.length}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Calendar, Edit2, Check, X, Copy, ArrowRight, Receipt, Settings2 } from 'lucide-react';
+import { Loader2, Calendar, Edit2, Check, X, Copy, ArrowRight, Receipt, Settings2, PanelRightClose, PanelRightOpen, LayoutDashboard, History } from 'lucide-react';
 import { fetchGroceryListsWithItemCount, GroceryListWithCount, duplicateGroceryList } from '@/lib/groceryLists';
 import { duplicatePurchaseToNewList, PurchaseRecordWithItems } from '@/lib/purchaseRecords';
 import { t } from '@/lib/translations';
@@ -53,6 +53,19 @@ export function Sidebar({
     previousLists: true,
     standalonePurchases: true,
   });
+  // Desktop-only: collapse the sidebar to a slim icon rail (persisted)
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem('sidebar_collapsed') === '1');
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      localStorage.setItem('sidebar_collapsed', prev ? '0' : '1');
+      return !prev;
+    });
+  };
 
   useEffect(() => {
     if (!activeUserId) {
@@ -438,9 +451,60 @@ export function Sidebar({
 
   return (
     <>
-      {/* Desktop Sidebar - Fixed */}
-      <aside className="hidden md:flex w-64 h-screen sticky top-0 flex-col border-l border-r border-slate-200/50 dark:border-slate-800/50 shadow-lg [dir=rtl]:border-l-0 [dir=ltr]:border-r-0">
-        <SidebarContent />
+      {/* Desktop Sidebar - pinned column, collapsible to a slim icon rail */}
+      <aside
+        className={`hidden md:flex ${collapsed ? 'w-14' : 'w-64'} h-screen sticky top-0 flex-col border-l border-r border-slate-200/50 dark:border-slate-800/50 shadow-lg [dir=rtl]:border-l-0 [dir=ltr]:border-r-0 transition-[width] duration-300 overflow-hidden`}
+      >
+        {collapsed ? (
+          <div className="h-full flex flex-col items-center gap-1.5 py-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
+            <button
+              onClick={toggleCollapsed}
+              title={t.expandSidebar}
+              className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <PanelRightOpen className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+            </button>
+            <div className="w-8 border-t border-slate-200/70 dark:border-slate-700/70 my-1" />
+            {activeUserId && (
+              <a
+                href={`/dashboard?userId=${activeUserId}`}
+                title="Dashboard"
+                className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <LayoutDashboard className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+              </a>
+            )}
+            <button
+              onClick={toggleCollapsed}
+              title={t.previousLists}
+              className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <History className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+            </button>
+            {activeUserId && (
+              <a
+                href={`/settings?userId=${activeUserId}`}
+                title={t.settings}
+                className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Settings2 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+              </a>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center p-1.5 border-b border-slate-200/50 dark:border-slate-800/50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
+              <button
+                onClick={toggleCollapsed}
+                title={t.collapseSidebar}
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <PanelRightClose className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+              </button>
+            </div>
+            <SidebarContent />
+          </>
+        )}
       </aside>
 
       {/* Mobile Drawer */}

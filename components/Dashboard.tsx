@@ -8,7 +8,7 @@ import {
   getTopItemsBySpending, SpendingItem,
   getMonthlySpendingStats, MonthlySpendingPoint,
   getStoreComparisonByBasket, StoreBasketComparison,
-  getDailyPriceRecommendation, StoreRecommendation, DailyPriceRecommendationResult,
+  getDailyPriceRecommendationForList, StoreRecommendation, DailyPriceRecommendationResult,
   getTopPurchasedItems, TopItem,
   getSpendingByCategory, SpendingByCategory,
   getMissingItemsByStore, StoreMissingStats,
@@ -16,6 +16,8 @@ import {
 } from '@/lib/analytics';
 import type { PricePoint } from '@/lib/itemPrices';
 import { CATEGORY_ICONS } from '@/lib/categories';
+import { fetchGroceryLists } from '@/lib/groceryLists';
+import { fetchGroceryItems } from '@/lib/groceryItems';
 import { t } from '@/lib/translations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -84,6 +86,7 @@ export function Dashboard({ userId }: DashboardProps) {
   const [topBySpending, setTopBySpending] = useState<SpendingItem[]>([]);
   const [monthlySpending, setMonthlySpending] = useState<MonthlySpendingPoint[]>([]);
   const [marketRec, setMarketRec] = useState<DailyPriceRecommendationResult | null>(null);
+  const [currentListSize, setCurrentListSize] = useState(0);
   const [expandedChain, setExpandedChain] = useState<string | null>(null);
   const [topBought, setTopBought] = useState<TopItem[]>([]);
   const [categorySpend, setCategorySpend] = useState<SpendingByCategory[]>([]);
@@ -107,19 +110,36 @@ export function Dashboard({ userId }: DashboardProps) {
     async function loadStats() {
       setLoading(true);
       try {
-        const [kpis, baskets, topSpend, monthSpend, market] = await Promise.all([
+        const [kpis, baskets, topSpend, monthSpend] = await Promise.all([
           getLightDashboardStats(userId!),
           getStoreComparisonByBasket(userId!),
           getTopItemsBySpending(userId!, 5),
           getMonthlySpendingStats(userId!),
-          getDailyPriceRecommendation(userId!),
         ]);
         if (cancelled) return;
         setStats(kpis);
         setStoreBaskets(baskets);
         setTopBySpending(topSpend);
         setMonthlySpending(monthSpend);
-        setMarketRec(market);
+
+        // Market recommendation follows the CURRENT active list: only chains
+        // carrying at least one of the list's items, ranked cheapest-first.
+        (async () => {
+          try {
+            const lists = await fetchGroceryLists(userId!);
+            if (cancelled || lists.length === 0) return;
+            const listItems = await fetchGroceryItems(lists[0].id, userId!);
+            if (cancelled || listItems.length === 0) return;
+            setCurrentListSize(listItems.length);
+            const market = await getDailyPriceRecommendationForList(
+              userId!,
+              listItems.map((i) => i.name)
+            );
+            if (!cancelled) setMarketRec(market);
+          } catch (e) {
+            console.error('marketRec:', e);
+          }
+        })();
 
         // Secondary sections load independently so a slow query never blocks the
         // core dashboard from rendering. Each updates its own state when ready.
@@ -284,6 +304,11 @@ export function Dashboard({ userId }: DashboardProps) {
               <Store className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               {t.whereToShopToday}
             </CardTitle>
+            {currentListSize > 0 && (
+              <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                {t.basedOnCurrentList(currentListSize)}
+              </p>
+            )}
             {marketRec.fetchedAt && (
               <p className="text-xs text-slate-400 mt-1">
                 {t.lastUpdated}: {new Date(marketRec.fetchedAt).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -291,7 +316,7 @@ export function Dashboard({ userId }: DashboardProps) {
             )}
             {marketRec.coveredItems > 0 && (
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                כיסוי נתונים: {marketRec.coveredItems} פריטים ב-{marketRec.storeCount} רשתות
+                כיסוי נתוני מחירים: {marketRec.coveredItems} מתוך {currentListSize || marketRec.coveredItems} פריטים, ב-{marketRec.storeCount} רשתות
               </p>
             )}
           </CardHeader>
@@ -327,7 +352,9 @@ export function Dashboard({ userId }: DashboardProps) {
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </button>
                   </div>
-                  <p className="text-xs text-slate-400 mr-7">{t.marketItemCount(rec.itemCount)}</p>
+                  <p className="text-xs text-slate-400 mr-7">
+                    {currentListSize > 0 ? t.chainCoverage(rec.itemCount, currentListSize) : t.marketItemCount(rec.itemCount)}
+                  </p>
 
                   {isExpanded && (
                     <div className="mt-2 mr-7 space-y-1 border-t border-slate-200 dark:border-slate-700 pt-2">
