@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 
+export type ListStatus = 'building' | 'ready';
+
 export interface GroceryList {
   id: string;
   local_user_id: string;
@@ -7,6 +9,8 @@ export interface GroceryList {
   created_at: string;
   completed_at?: string | null;
   total_cost?: number | null;
+  /** Lifecycle of the active list: being planned vs ready for shopping */
+  status?: ListStatus | null;
 }
 
 export interface GroceryListWithCount extends GroceryList {
@@ -193,6 +197,34 @@ export async function updateGroceryListTitle(listId: string, title: string, user
 
   if (error) {
     throw new Error(`Failed to update grocery list title: ${error.message}`);
+  }
+
+  return data;
+}
+
+export async function updateListStatus(listId: string, userId: string, status: ListStatus): Promise<GroceryList> {
+  // First verify the list belongs to the user
+  const { data: listCheck, error: listError } = await supabase
+    .from('grocery_lists')
+    .select('id')
+    .eq('id', listId)
+    .eq('local_user_id', userId)
+    .single();
+
+  if (listError || !listCheck) {
+    throw new Error(`Failed to update list status: List not found or access denied`);
+  }
+
+  const { data, error } = await supabase
+    .from('grocery_lists')
+    .update({ status })
+    .eq('id', listId)
+    .eq('local_user_id', userId) // Double-check in update
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to update list status: ${error.message}`);
   }
 
   return data;

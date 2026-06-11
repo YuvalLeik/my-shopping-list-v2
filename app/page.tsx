@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
-import { fetchGroceryLists, fetchGroceryListsWithItemCount, createGroceryList, deleteGroceryList, markListAsCompleted, updateGroceryListTitle, getGroceryListById, updateListTotalCost, GroceryList } from '@/lib/groceryLists';
+import { fetchGroceryLists, fetchGroceryListsWithItemCount, createGroceryList, deleteGroceryList, markListAsCompleted, updateGroceryListTitle, getGroceryListById, updateListTotalCost, updateListStatus, GroceryList } from '@/lib/groceryLists';
+import ShoppingView from '@/components/ShoppingView';
 import { fetchPurchaseRecordsByListId, fetchStandalonePurchaseRecords, deletePurchaseRecord, PurchaseRecordWithItems } from '@/lib/purchaseRecords';
 import { fetchGroceryItems, createGroceryItem, deleteGroceryItem, updateGroceryItem, getAllItemNames, getItemCategoryByName, GroceryItem } from '@/lib/groceryItems';
 import { uploadItemImage } from '@/lib/storage';
@@ -123,6 +124,9 @@ export default function Home() {
   const [busyCatalogNames, setBusyCatalogNames] = useState<Set<string>>(new Set());
   const [showAddItemDialog, setShowAddItemDialog] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  // Build mode = planning the list (storefront); shop mode = collecting in-store.
+  // Derived from the list's persisted status so both family devices agree.
+  const [uiMode, setUiMode] = useState<'build' | 'shop'>('build');
   // Average prices (from personal history) for items in the current list, used
   // as a fallback so the basket total reflects items added without a stored price.
   const [listAvgPrices, setListAvgPrices] = useState<Map<string, number>>(new Map());
@@ -994,6 +998,44 @@ export default function Home() {
     }
   };
 
+  // Sync uiMode with the selected list's persisted status (so a list marked
+  // ready on one device opens in shopping mode on the other).
+  useEffect(() => {
+    if (!selectedListId) {
+      setUiMode('build');
+      return;
+    }
+    const list = lists.find((l) => l.id === selectedListId);
+    setUiMode(list?.status === 'ready' ? 'shop' : 'build');
+  }, [selectedListId, lists]);
+
+  const handleMarkReady = async () => {
+    if (!selectedListId || !activeUserId) return;
+    try {
+      const updated = await updateListStatus(selectedListId, activeUserId, 'ready');
+      setLists((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+      setCartOpen(false);
+      setUiMode('shop');
+      toast.success(t.listMarkedReady);
+    } catch (err) {
+      toast.error('לא הצלחתי לסמן את הרשימה כמוכנה', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  };
+
+  const handleBackToEdit = async () => {
+    if (!selectedListId || !activeUserId) return;
+    setUiMode('build');
+    try {
+      const updated = await updateListStatus(selectedListId, activeUserId, 'building');
+      setLists((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+      toast.info(t.listBackToBuilding);
+    } catch (err) {
+      console.error('Failed to set list back to building:', err);
+    }
+  };
+
   // --- Storefront catalog handlers ---
 
   const handleAddFromCatalog = async (entry: CatalogEntry) => {
@@ -1517,7 +1559,24 @@ export default function Home() {
 
         <main className={`relative z-0 flex-1 min-h-0 flex flex-col overflow-hidden`}>
           {activeUserId && selectedListId ? (
-            <div className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 flex flex-col">
+            <>
+            {uiMode === 'shop' && (
+              <ShoppingView
+                items={items}
+                listTitle={listTitle}
+                listAvgPrices={listAvgPrices}
+                marketBanner={marketBanner}
+                updatingItemId={updatingItemId}
+                onToggleCollected={handleTogglePurchased}
+                onToggleUnavailable={handleToggleUnavailable}
+                onAddItem={() => handleOpenAddItemDialog()}
+                onFinish={() => { setCompleteListTotalCost(''); setShowCompleteDialog(true); }}
+                onBackToEdit={handleBackToEdit}
+              />
+            )}
+            {/* Build layout stays mounted but hidden in shop mode so its
+                portal-based dialogs (add item, complete list) keep working */}
+            <div className={`flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 ${uiMode === 'shop' ? 'hidden' : 'flex flex-col'}`}>
               {/* Storefront sub-header — fixed: search + new item + category bar */}
               <div className="shrink-0 pt-3 sm:pt-4 pb-2 space-y-2.5">
                 <div className="flex items-center gap-2">
@@ -1893,23 +1952,13 @@ export default function Home() {
                           <span className="hidden sm:inline">{t.importReceipt}</span>
                         </Button>
                         <Button
-                          onClick={() => { setCompleteListTotalCost(''); setShowCompleteDialog(true); }}
-                          className="bg-green-600 hover:bg-green-700 text-white [dir=rtl]:flex-row-reverse"
+                          onClick={handleMarkReady}
+                          className="bg-blue-600 hover:bg-blue-700 text-white [dir=rtl]:flex-row-reverse"
                           size="sm"
-                          disabled={completingListId !== null}
-                          title={t.markListCompleted}
+                          title={t.readyForShopping}
                         >
-                          {completingListId ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin sm:me-1" />
-                              <span className="hidden sm:inline">{t.markListCompleted}</span>
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="h-4 w-4 sm:me-1" />
-                              <span className="hidden sm:inline">{t.markListCompleted}</span>
-                            </>
-                          )}
+                          <ShoppingCart className="h-4 w-4 sm:me-1" />
+                          <span className="hidden sm:inline">{t.readyForShopping}</span>
                         </Button>
                       </div>
                     </div>
@@ -2282,6 +2331,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
+            </>
           ) : activeUserId ? (
             <div className="flex-1 flex items-center justify-center p-6">
               <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 max-w-md w-full">
@@ -2316,8 +2366,8 @@ export default function Home() {
           </div>
         </main>
 
-        {/* Floating Action Button - Add item (Mobile only) */}
-        {showFab && activeUserId && selectedListId && (
+        {/* Floating Action Button - Add item (Mobile only, build mode) */}
+        {uiMode === 'build' && showFab && activeUserId && selectedListId && (
           <button
             onClick={() => handleOpenAddItemDialog()}
             className="fixed z-40 w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center md:hidden right-6 [dir=rtl]:right-auto [dir=rtl]:left-6"
@@ -2330,7 +2380,7 @@ export default function Home() {
 
         {/* Mobile cart bottom bar (the dim overlay lives next to the cart sheet
             inside <main> so they share one stacking context — see content row) */}
-        {activeUserId && selectedListId && !cartOpen && (
+        {uiMode === 'build' && activeUserId && selectedListId && !cartOpen && (
           <CartBar
             itemCount={items.length}
             estimatedTotal={cartEstimatedTotal}
