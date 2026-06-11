@@ -1,15 +1,17 @@
 'use client';
 
-import { CATEGORIES, CATEGORY_ICONS } from '@/lib/categories';
+import { CATEGORIES, CATEGORY_ICONS, MOST_ORDERED } from '@/lib/categories';
 import { t } from '@/lib/translations';
 
 interface CategoryBarProps {
   selected: string | null; // null = all categories
   counts: Map<string, number>;
+  /** Number of items that qualify as "most ordered" (0 hides the chip) */
+  mostOrderedCount?: number;
   onSelect: (category: string | null) => void;
 }
 
-export default function CategoryBar({ selected, counts, onSelect }: CategoryBarProps) {
+export default function CategoryBar({ selected, counts, mostOrderedCount = 0, onSelect }: CategoryBarProps) {
   const visibleCategories = CATEGORIES.filter((c) => (counts.get(c) ?? 0) > 0);
 
   return (
@@ -20,6 +22,14 @@ export default function CategoryBar({ selected, counts, onSelect }: CategoryBarP
         active={selected === null}
         onClick={() => onSelect(null)}
       />
+      {mostOrderedCount > 0 && (
+        <CategoryChip
+          label={MOST_ORDERED}
+          icon={CATEGORY_ICONS[MOST_ORDERED]}
+          active={selected === MOST_ORDERED}
+          onClick={() => onSelect(MOST_ORDERED)}
+        />
+      )}
       {visibleCategories.map((category) => (
         <CategoryChip
           key={category}

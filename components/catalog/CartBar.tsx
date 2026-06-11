@@ -6,6 +6,8 @@ import { t } from '@/lib/translations';
 interface CartBarProps {
   itemCount: number;
   estimatedTotal: number;
+  /** True when every item has a (stored or estimated) price; false shows a "~" prefix */
+  allPriced?: boolean;
   onOpen: () => void;
 }
 
@@ -13,7 +15,7 @@ interface CartBarProps {
  * Mobile-only fixed bottom bar showing the current list size and estimated
  * total (like the checkout bar on supermarket sites). Tapping opens the cart.
  */
-export default function CartBar({ itemCount, estimatedTotal, onOpen }: CartBarProps) {
+export default function CartBar({ itemCount, estimatedTotal, allPriced = true, onOpen }: CartBarProps) {
   return (
     <button
       type="button"
@@ -34,7 +36,7 @@ export default function CartBar({ itemCount, estimatedTotal, onOpen }: CartBarPr
       </span>
       <span className="flex items-center gap-2 text-sm font-bold">
         {estimatedTotal > 0 && (
-          <span dir="ltr">₪{estimatedTotal.toFixed(2)}</span>
+          <span dir="ltr">{allPriced ? '' : '~'}₪{estimatedTotal.toFixed(2)}</span>
         )}
         <ChevronUp className="size-5" />
       </span>

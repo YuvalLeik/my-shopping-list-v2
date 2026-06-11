@@ -41,8 +41,8 @@ import { ImportReceiptPanel } from '@/app/components/ImportReceiptPanel';
 import { t } from '@/lib/translations';
 import { fetchLocalUsers, LocalUser } from '@/lib/localUsers';
 import { resolveItemDisplayInfo } from '@/lib/itemAliases';
-import { CATEGORIES } from '@/lib/categories';
-import { getItemAveragePrice, recordPrices } from '@/lib/itemPrices';
+import { CATEGORIES, MOST_ORDERED, MOST_ORDERED_MIN_FREQUENCY } from '@/lib/categories';
+import { getItemAveragePrice, getItemAveragePrices, recordPrices } from '@/lib/itemPrices';
 import { getDailyPriceRecommendationForList, DailyPriceRecommendationResult } from '@/lib/analytics';
 import { GroceryItemRow } from '@/components/GroceryItemRow';
 
@@ -123,6 +123,9 @@ export default function Home() {
   const [busyCatalogNames, setBusyCatalogNames] = useState<Set<string>>(new Set());
   const [showAddItemDialog, setShowAddItemDialog] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  // Average prices (from personal history) for items in the current list, used
+  // as a fallback so the basket total reflects items added without a stored price.
+  const [listAvgPrices, setListAvgPrices] = useState<Map<string, number>>(new Map());
 
 
   // Load all item names for autocomplete from global catalog (shopping_items)
@@ -333,6 +336,30 @@ export default function Home() {
       .finally(() => { if (!cancelled) setLoadingCatalog(false); });
     return () => { cancelled = true; };
   }, [activeUserId, catalogRefreshTrigger]);
+
+  // Load average prices (from history) for the current list's items, so the
+  // basket total can fall back to them when an item has no stored estimated_price.
+  useEffect(() => {
+    if (!activeUserId || items.length === 0) {
+      setListAvgPrices(new Map());
+      return;
+    }
+    let cancelled = false;
+    const names = items.map((i) => i.name);
+    getItemAveragePrices(activeUserId, names)
+      .then((map) => { if (!cancelled) setListAvgPrices(map); })
+      .catch((err) => console.error('Failed to load list avg prices:', err));
+    return () => { cancelled = true; };
+  }, [activeUserId, items]);
+
+  // Lock background scroll while the mobile cart sheet is open so touch-scrolling
+  // stays inside the sheet instead of moving the product grid behind it.
+  useEffect(() => {
+    if (!cartOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [cartOpen]);
 
   // Filter suggestions based on input
   useEffect(() => {
@@ -1054,15 +1081,32 @@ export default function Home() {
   for (const entry of catalog) {
     categoryCounts.set(entry.category, (categoryCounts.get(entry.category) ?? 0) + 1);
   }
+  const mostOrderedCount = catalog.filter((e) => e.frequency >= MOST_ORDERED_MIN_FREQUENCY).length;
   const normalizedCatalogSearch = catalogSearch.trim().toLowerCase();
   const filteredCatalog = catalog.filter((entry) => {
-    if (categoryFilter && entry.category !== categoryFilter) return false;
+    if (categoryFilter === MOST_ORDERED) {
+      if (entry.frequency < MOST_ORDERED_MIN_FREQUENCY) return false;
+    } else if (categoryFilter && entry.category !== categoryFilter) {
+      return false;
+    }
     if (normalizedCatalogSearch && !entry.name.toLowerCase().includes(normalizedCatalogSearch)) return false;
     return true;
-  });
+  })
+  // catalog is already sorted by frequency desc; cap the most-ordered view
+  .slice(0, categoryFilter === MOST_ORDERED ? 30 : undefined);
+  // Effective unit price: stored price wins, else fall back to historical average.
+  const effectiveUnitPrice = (item: GroceryItem): number | null => {
+    if (item.estimated_price != null && item.estimated_price > 0) return item.estimated_price;
+    const avg = listAvgPrices.get(item.name);
+    return avg != null && avg > 0 ? avg : null;
+  };
   const cartEstimatedTotal = Math.round(
-    items.reduce((sum, item) => sum + (item.estimated_price ?? 0) * item.quantity, 0) * 100
+    items.reduce((sum, item) => {
+      const p = effectiveUnitPrice(item);
+      return sum + (p ?? 0) * item.quantity;
+    }, 0) * 100
   ) / 100;
+  const cartPricedCount = items.filter((item) => effectiveUnitPrice(item) != null).length;
 
   // Reusable prior list Card content (desktop inline + mobile drawer)
   const previousListCardContent = (
@@ -1385,11 +1429,12 @@ export default function Home() {
         }}
       />
 
-      {/* Main Content — min-w-0 lets this flex item shrink below its content's
-          min-content width (the category chip row), preventing page overflow on phones */}
-      <div className="flex-1 min-w-0 relative min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30 dark:from-slate-950 dark:to-slate-900">
+      {/* Main Content — app shell: a height-constrained flex column so the top
+          bar and storefront sub-header stay fixed and only the product grid /
+          cart scroll. min-w-0 lets it shrink below content width on phones. */}
+      <div className="flex-1 min-w-0 relative h-[100dvh] flex flex-col overflow-hidden bg-gradient-to-br from-slate-50 to-blue-50/30 dark:from-slate-950 dark:to-slate-900">
         {/* Top Bar */}
-        <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200/50 dark:border-slate-800/50 relative">
+        <div className="shrink-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200/50 dark:border-slate-800/50 relative">
           {/* Mobile Hamburger Toggle Button - absolute positioning יחסית ל-top bar, מצד ימין למעלה */}
           <Button
             variant="outline"
@@ -1470,21 +1515,11 @@ export default function Home() {
           </div>
         </div>
 
-        <main className={`relative z-0 container mx-auto px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 max-w-7xl pb-24 lg:pb-8`}>
-
-          <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-6 lg:items-start">
-            {/* Active List - Always shown */}
-            {activeUserId && selectedListId && (
-              <>
-              <div className="space-y-4 min-w-0">
-                {/* Previous list / standalone purchase view (desktop, above storefront) */}
-                {(viewingPreviousListId || viewingStandalonePurchaseId) && (
-                  <div className="hidden md:block">
-                    {viewingPreviousListId ? previousListCardContent : standalonePurchaseCardContent}
-                  </div>
-                )}
-
-                {/* Storefront: search + new item button */}
+        <main className={`relative z-0 flex-1 min-h-0 flex flex-col overflow-hidden`}>
+          {activeUserId && selectedListId ? (
+            <div className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 flex flex-col">
+              {/* Storefront sub-header — fixed: search + new item + category bar */}
+              <div className="shrink-0 pt-3 sm:pt-4 pb-2 space-y-2.5">
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <Search className="absolute top-1/2 -translate-y-1/2 start-3 h-4 w-4 text-slate-400 pointer-events-none" />
@@ -1505,36 +1540,44 @@ export default function Home() {
                     {t.newItemCard}
                   </Button>
                 </div>
-
-                {/* Category icon bar */}
-                <CategoryBar selected={categoryFilter} counts={categoryCounts} onSelect={setCategoryFilter} />
-
-                {/* Product grid */}
-                {loadingCatalog && catalog.length === 0 ? (
-                  <div className="flex items-center justify-center py-16 text-slate-500 dark:text-slate-400">
-                    <Loader2 className="h-5 w-5 animate-spin me-2 text-emerald-600 dark:text-emerald-400" />
-                    <span>{t.loadingItems}</span>
-                  </div>
-                ) : (
-                  <ProductGrid
-                    entries={filteredCatalog}
-                    inListByName={inListByName}
-                    searchTerm={catalogSearch}
-                    busyNames={busyCatalogNames}
-                    onAdd={handleAddFromCatalog}
-                    onQuantityChange={handleCatalogQuantityChange}
-                    onRemove={handleCatalogRemove}
-                    onAddNewItem={(name) => handleOpenAddItemDialog(name)}
-                  />
-                )}
+                <CategoryBar selected={categoryFilter} counts={categoryCounts} mostOrderedCount={mostOrderedCount} onSelect={setCategoryFilter} />
               </div>
 
-              {/* Cart panel: desktop sticky column / mobile bottom sheet */}
-              <div
-                className={`fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-slate-50 dark:bg-slate-950 shadow-2xl transition-transform duration-300 ${cartOpen ? 'translate-y-0' : 'translate-y-full'} lg:sticky lg:top-24 lg:inset-x-auto lg:bottom-auto lg:z-0 lg:max-h-[calc(100vh-7rem)] lg:translate-y-0 lg:rounded-xl lg:shadow-none lg:bg-transparent lg:dark:bg-transparent`}
-              >
+              {/* Content row: scrollable product grid + desktop cart column */}
+              <div className="flex-1 min-h-0 flex gap-6">
+                {/* Product grid pane (the only thing that scrolls on desktop) */}
+                <div className="flex-1 min-w-0 overflow-y-auto pb-28 lg:pb-6">
+                  {/* Previous list / standalone purchase view (desktop) */}
+                  {(viewingPreviousListId || viewingStandalonePurchaseId) && (
+                    <div className="hidden md:block mb-4">
+                      {viewingPreviousListId ? previousListCardContent : standalonePurchaseCardContent}
+                    </div>
+                  )}
+                  {loadingCatalog && catalog.length === 0 ? (
+                    <div className="flex items-center justify-center py-16 text-slate-500 dark:text-slate-400">
+                      <Loader2 className="h-5 w-5 animate-spin me-2 text-emerald-600 dark:text-emerald-400" />
+                      <span>{t.loadingItems}</span>
+                    </div>
+                  ) : (
+                    <ProductGrid
+                      entries={filteredCatalog}
+                      inListByName={inListByName}
+                      searchTerm={catalogSearch}
+                      busyNames={busyCatalogNames}
+                      onAdd={handleAddFromCatalog}
+                      onQuantityChange={handleCatalogQuantityChange}
+                      onRemove={handleCatalogRemove}
+                      onAddNewItem={(name) => handleOpenAddItemDialog(name)}
+                    />
+                  )}
+                </div>
+
+                {/* Cart panel: desktop scrolling column / mobile bottom sheet */}
+                <div
+                  className={`fixed inset-x-0 bottom-0 z-50 flex flex-col max-h-[85vh] rounded-t-2xl bg-slate-50 dark:bg-slate-950 shadow-2xl transition-transform duration-300 ${cartOpen ? 'translate-y-0' : 'translate-y-full'} lg:static lg:z-0 lg:flex lg:w-[380px] lg:shrink-0 lg:max-h-none lg:h-full lg:translate-y-0 lg:rounded-xl lg:shadow-none lg:bg-transparent lg:dark:bg-transparent`}
+                >
                 {/* Mobile-only cart header with close button */}
-                <div className="lg:hidden sticky top-0 z-10 flex items-center justify-between bg-slate-50 dark:bg-slate-950 px-4 py-2 border-b border-slate-200 dark:border-slate-800">
+                <div className="lg:hidden shrink-0 flex items-center justify-between bg-slate-50 dark:bg-slate-950 px-4 py-2 border-b border-slate-200 dark:border-slate-800">
                   <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t.myCart}</span>
                   <button
                     onClick={() => setCartOpen(false)}
@@ -1544,7 +1587,7 @@ export default function Home() {
                     <X className="h-5 w-5 text-slate-500" />
                   </button>
                 </div>
-                <div className="p-3 lg:p-0 space-y-6">
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 lg:p-0 lg:pb-6 space-y-6">
                 {/* Add New Item Dialog (opened from storefront "new item" button) */}
                 <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
                   <DialogContent className="max-h-[90vh] overflow-y-auto" dir="rtl">
@@ -1945,8 +1988,8 @@ export default function Home() {
                       const groupedUnavailable = groupByCategory(unavailableItems);
                       const groupedPurchased = groupByCategory(purchasedItems);
                       
-                      const predictedTotal = items.reduce((sum, item) => sum + (item.estimated_price ?? 0) * item.quantity, 0);
-                      const predictedTotalRounded = Math.round(predictedTotal * 100) / 100;
+                      const predictedTotalRounded = cartEstimatedTotal;
+                      const allPriced = cartPricedCount >= items.length;
 
                       return (
                         <div className="space-y-4 sm:space-y-6">
@@ -1961,7 +2004,12 @@ export default function Home() {
                               </div>
                               {predictedTotalRounded > 0 && (
                                 <div className="text-xs sm:text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                                  עלות משוערת: ₪{predictedTotalRounded.toLocaleString()}
+                                  עלות משוערת: {allPriced ? '' : '~'}₪{predictedTotalRounded.toLocaleString()}
+                                  {!allPriced && (
+                                    <span className="text-slate-400 dark:text-slate-500 font-normal">
+                                      {' '}({cartPricedCount} מתוך {items.length} מתומחרים)
+                                    </span>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -2104,7 +2152,7 @@ export default function Home() {
                                     </h3>
                                     <ul className="space-y-2 sm:space-y-3">
                                       {categoryItems.map((item) => (
-                                        <GroceryItemRow key={item.id} item={item} variant="active" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} onAddPrice={handleOpenAddPrice} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
+                                        <GroceryItemRow key={item.id} item={item} variant="active" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} onAddPrice={handleOpenAddPrice} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
                                       ))}
                                     </ul>
                                   </div>
@@ -2113,7 +2161,7 @@ export default function Home() {
                                 // Alphabetical list
                                 <ul className="space-y-2 sm:space-y-3">
                                   {groupedNotPurchased['כל הפריטים']?.map((item) => (
-                                    <GroceryItemRow key={item.id} item={item} variant="active" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} onAddPrice={handleOpenAddPrice} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
+                                    <GroceryItemRow key={item.id} item={item} variant="active" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} onAddPrice={handleOpenAddPrice} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
                                   ))}
                                 </ul>
                               )}
@@ -2150,7 +2198,7 @@ export default function Home() {
                                     </h4>
                                     <ul className="space-y-2 sm:space-y-3">
                                       {categoryItems.map((item) => (
-                                        <GroceryItemRow key={item.id} item={item} variant="purchased" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
+                                        <GroceryItemRow key={item.id} item={item} variant="purchased" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
                                       ))}
                                     </ul>
                                   </div>
@@ -2159,7 +2207,7 @@ export default function Home() {
                                 // Alphabetical list for purchased items
                                 <ul className="space-y-2 sm:space-y-3">
                                   {groupedPurchased['כל הפריטים']?.map((item) => (
-                                    <GroceryItemRow key={item.id} item={item} variant="purchased" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
+                                    <GroceryItemRow key={item.id} item={item} variant="purchased" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
                                   ))}
                                 </ul>
                               )}
@@ -2196,7 +2244,7 @@ export default function Home() {
                                       </h4>
                                       <ul className="space-y-2 sm:space-y-3">
                                         {categoryItems.map((item) => (
-                                          <GroceryItemRow key={item.id} item={item} variant="unavailable" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
+                                          <GroceryItemRow key={item.id} item={item} variant="unavailable" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
                                         ))}
                                       </ul>
                                     </div>
@@ -2204,7 +2252,7 @@ export default function Home() {
                                 ) : (
                                   <ul className="space-y-2 sm:space-y-3">
                                     {groupedUnavailable['כל הפריטים']?.map((item) => (
-                                      <GroceryItemRow key={item.id} item={item} variant="unavailable" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
+                                      <GroceryItemRow key={item.id} item={item} variant="unavailable" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
                                     ))}
                                   </ul>
                                 )}
@@ -2217,12 +2265,24 @@ export default function Home() {
                   </CardContent>
                 </Card>
                 </div>
+                </div>
               </div>
-              </>
-            )}
-          </div>
+            </div>
+          ) : activeUserId ? (
+            <div className="flex-1 flex items-center justify-center p-6">
+              <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 max-w-md w-full">
+                <CardContent className="py-12">
+                  <div className="text-center text-slate-500 dark:text-slate-400">
+                    <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-50 text-slate-400 dark:text-slate-500" />
+                    <p className="font-medium mb-1 text-slate-600 dark:text-slate-300">{t.noListSelected}</p>
+                    <p className="text-sm">{t.noListSelectedDescription}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : null}
 
-          {/* Second column - Mobile: full-width drawer overlay */}
+          {/* Previous list / standalone purchase - Mobile: full-width drawer overlay */}
           <div className="md:hidden">
             <Drawer
               open={!!(viewingPreviousListId || viewingStandalonePurchaseId)}
@@ -2240,18 +2300,6 @@ export default function Home() {
               </DrawerContent>
             </Drawer>
           </div>
-
-          {activeUserId && !selectedListId && (
-            <Card className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-              <CardContent className="py-12">
-                <div className="text-center text-slate-500 dark:text-slate-400">
-                  <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-50 text-slate-400 dark:text-slate-500" />
-                  <p className="font-medium mb-1 text-slate-600 dark:text-slate-300">{t.noListSelected}</p>
-                  <p className="text-sm">{t.noListSelectedDescription}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </main>
 
         {/* Floating Action Button - Add item (Mobile only) */}
@@ -2278,6 +2326,7 @@ export default function Home() {
           <CartBar
             itemCount={items.length}
             estimatedTotal={cartEstimatedTotal}
+            allPriced={cartPricedCount >= items.length}
             onOpen={() => setCartOpen(true)}
           />
         )}

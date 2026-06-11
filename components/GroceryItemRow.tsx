@@ -14,6 +14,8 @@ interface GroceryItemRowProps {
   onDelete: (itemId: string) => void;
   onUpdateImage: (itemId: string, file: File) => void;
   onAddPrice?: (item: GroceryItem) => void;
+  /** Average price from history, used when the item has no stored estimated_price */
+  avgFallbackPrice?: number | null;
   updatingItemId: string | null;
   deletingItemId: string | null;
   uploadingImageForItem: string | null;
@@ -32,6 +34,7 @@ export function GroceryItemRow({
   onDelete,
   onUpdateImage,
   onAddPrice,
+  avgFallbackPrice,
   updatingItemId,
   deletingItemId,
   uploadingImageForItem,
@@ -40,6 +43,12 @@ export function GroceryItemRow({
   toggleItemSelection,
   bulkDeleting,
 }: GroceryItemRowProps) {
+  // Stored price wins; otherwise fall back to the historical average (an estimate).
+  const hasStoredPrice = item.estimated_price != null && item.estimated_price > 0;
+  const unitPrice = hasStoredPrice
+    ? (item.estimated_price as number)
+    : (avgFallbackPrice != null && avgFallbackPrice > 0 ? avgFallbackPrice : null);
+  const isEstimate = !hasStoredPrice && unitPrice != null;
   if (variant === 'unavailable') {
     return (
       <li className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-4 border border-amber-200 dark:border-amber-800 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 transition-colors [dir=rtl]:flex-row-reverse">
@@ -174,15 +183,24 @@ export function GroceryItemRow({
         <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
           {item.category || 'ללא קטגוריה'}
         </div>
-        {item.estimated_price != null && item.estimated_price > 0 ? (
-          <div className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-700">
-            ₪{(item.estimated_price * item.quantity).toFixed(2)}
+        {unitPrice != null ? (
+          <button
+            type="button"
+            onClick={() => onAddPrice && onAddPrice(item)}
+            title={isEstimate ? 'מחיר משוער מההיסטוריה — לחץ לעדכון' : 'לחץ לעדכון מחיר'}
+            className={`mt-1 inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border transition-colors ${
+              isEstimate
+                ? 'text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:text-emerald-600'
+                : 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700'
+            }`}
+          >
+            {isEstimate ? '~' : ''}₪{(unitPrice * item.quantity).toFixed(2)}
             {item.quantity > 1 && (
-              <span className="text-emerald-500 dark:text-emerald-500 font-normal">
-                ({item.quantity} × ₪{item.estimated_price.toFixed(2)})
+              <span className="font-normal opacity-70">
+                ({item.quantity} × ₪{unitPrice.toFixed(2)})
               </span>
             )}
-          </div>
+          </button>
         ) : (
           <button
             type="button"

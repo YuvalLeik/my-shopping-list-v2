@@ -9,7 +9,13 @@ import {
   getMonthlySpendingStats, MonthlySpendingPoint,
   getStoreComparisonByBasket, StoreBasketComparison,
   getDailyPriceRecommendation, StoreRecommendation, DailyPriceRecommendationResult,
+  getTopPurchasedItems, TopItem,
+  getSpendingByCategory, SpendingByCategory,
+  getMissingItemsByStore, StoreMissingStats,
+  getItemPriceHistory,
 } from '@/lib/analytics';
+import type { PricePoint } from '@/lib/itemPrices';
+import { CATEGORY_ICONS } from '@/lib/categories';
 import { t } from '@/lib/translations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -79,6 +85,10 @@ export function Dashboard({ userId }: DashboardProps) {
   const [monthlySpending, setMonthlySpending] = useState<MonthlySpendingPoint[]>([]);
   const [marketRec, setMarketRec] = useState<DailyPriceRecommendationResult | null>(null);
   const [expandedChain, setExpandedChain] = useState<string | null>(null);
+  const [topBought, setTopBought] = useState<TopItem[]>([]);
+  const [categorySpend, setCategorySpend] = useState<SpendingByCategory[]>([]);
+  const [missingByStore, setMissingByStore] = useState<StoreMissingStats[]>([]);
+  const [topItemTrend, setTopItemTrend] = useState<{ name: string; points: PricePoint[] } | null>(null);
 
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
@@ -100,7 +110,7 @@ export function Dashboard({ userId }: DashboardProps) {
         const [kpis, baskets, topSpend, monthSpend, market] = await Promise.all([
           getLightDashboardStats(userId!),
           getStoreComparisonByBasket(userId!),
-          getTopItemsBySpending(userId!, 10),
+          getTopItemsBySpending(userId!, 5),
           getMonthlySpendingStats(userId!),
           getDailyPriceRecommendation(userId!),
         ]);
@@ -110,6 +120,17 @@ export function Dashboard({ userId }: DashboardProps) {
         setTopBySpending(topSpend);
         setMonthlySpending(monthSpend);
         setMarketRec(market);
+
+        // Secondary sections load independently so a slow query never blocks the
+        // core dashboard from rendering. Each updates its own state when ready.
+        getTopPurchasedItems(userId!, 5).then((d) => { if (!cancelled) setTopBought(d); }).catch((e) => console.error('topBought:', e));
+        getSpendingByCategory(userId!).then((d) => { if (!cancelled) setCategorySpend(d); }).catch((e) => console.error('categorySpend:', e));
+        getMissingItemsByStore(userId!).then((d) => { if (!cancelled) setMissingByStore(d); }).catch((e) => console.error('missingByStore:', e));
+        if (topSpend.length > 0) {
+          getItemPriceHistory(userId!, topSpend[0].itemName)
+            .then((points) => { if (!cancelled && points.length >= 2) setTopItemTrend({ name: topSpend[0].itemName, points }); })
+            .catch((e) => console.error('topItemTrend:', e));
+        }
       } catch (error) {
         console.error('Failed to load dashboard stats:', error);
         if (!cancelled) {
@@ -154,8 +175,32 @@ export function Dashboard({ userId }: DashboardProps) {
 
   const hasAnyData = stats.totalPurchasedItems > 0 || storeBaskets.length > 0 || topBySpending.length > 0 || monthlySpending.length > 0;
 
+  const thisMonth = monthlySpending.length > 0 ? monthlySpending[monthlySpending.length - 1] : null;
+
   return (
     <div className="space-y-6">
+      {/* This month summary */}
+      {thisMonth && (
+        <Card className="shadow-sm border-indigo-200/60 dark:border-indigo-700/50 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-900/30 dark:to-slate-900">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse mb-2">
+              <span className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">החודש ({thisMonth.month})</span>
+              <TrendingUp className="h-5 w-5 text-indigo-500" />
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-center">
+              <div className="rounded-lg bg-white/70 dark:bg-slate-800/60 p-2.5">
+                <div className="text-xl sm:text-2xl font-bold text-indigo-900 dark:text-indigo-100" dir="ltr">₪{thisMonth.totalSpent.toLocaleString()}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">הוצאות החודש</div>
+              </div>
+              <div className="rounded-lg bg-white/70 dark:bg-slate-800/60 p-2.5">
+                <div className="text-xl sm:text-2xl font-bold text-indigo-900 dark:text-indigo-100">{thisMonth.itemCount.toLocaleString()}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">פריטים שנקנו</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-900/30 dark:to-emerald-800/20 border-emerald-200/50 dark:border-emerald-700/50 shadow-sm">
@@ -428,6 +473,95 @@ export function Dashboard({ userId }: DashboardProps) {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Most-bought items + category breakdown (side by side on desktop) */}
+      {(topBought.length > 0 || categorySpend.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {topBought.length > 0 && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  🔥 הפריטים שאתם הכי קונים
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <ol className="space-y-2">
+                  {topBought.map((item, i) => (
+                    <li key={item.name} className="flex items-center gap-3 [dir=rtl]:flex-row-reverse">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex-shrink-0">
+                        {i + 1}
+                      </span>
+                      <span className="flex-1 min-w-0 truncate text-sm text-slate-700 dark:text-slate-200 text-right">{item.name}</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">×{item.total_quantity}</span>
+                    </li>
+                  ))}
+                </ol>
+                {topItemTrend && (
+                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 text-right">
+                      מגמת מחיר: {topItemTrend.name}
+                    </div>
+                    <div className="h-[80px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={topItemTrend.points} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                          <Tooltip content={<CustomTooltip />} />
+                          <Line type="monotone" dataKey="unit_price" stroke={CHART_COLORS.primary} strokeWidth={2} dot={false} name="₪ ליחידה" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {categorySpend.length > 0 && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  לאן הולך הכסף (לפי קטגוריה)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-2.5 mt-2">
+                  {(() => {
+                    const top = [...categorySpend].sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 6);
+                    const max = Math.max(...top.map((c) => c.totalSpent), 1);
+                    return top.map((c, i) => (
+                      <div key={c.category} className="[dir=rtl]:text-right">
+                        <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse text-xs mb-1">
+                          <span className="text-slate-600 dark:text-slate-300 truncate">
+                            {CATEGORY_ICONS[c.category] ?? '📦'} {c.category}
+                          </span>
+                          <span className="text-slate-500 dark:text-slate-400 flex-shrink-0" dir="ltr">₪{c.totalSpent.toLocaleString()}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${(c.totalSpent / max) * 100}%`, backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }}
+                          />
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Store insight: most out-of-stock store */}
+      {missingByStore.length > 0 && missingByStore[0].totalMissedItems > 0 && (
+        <Card className="shadow-sm border-amber-200/60 dark:border-amber-700/50 bg-amber-50/40 dark:bg-amber-900/10">
+          <CardContent className="p-4 flex items-center gap-3 [dir=rtl]:flex-row-reverse">
+            <Store className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <span className="text-sm text-slate-700 dark:text-slate-200 text-right">
+              ב<strong>{missingByStore[0].storeName}</strong> חסרו הכי הרבה פריטים — {missingByStore[0].totalMissedItems} פריטים שלא נמצאו (ממוצע {missingByStore[0].avgMissedPerTrip} לקנייה).
+            </span>
           </CardContent>
         </Card>
       )}
