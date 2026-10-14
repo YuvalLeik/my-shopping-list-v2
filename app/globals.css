@@ -143,16 +143,19 @@
   direction: ltr;
 }
 
-/* Force RTL text alignment */
-[dir="rtl"] * {
-  text-align: right;
-}
+/* RTL text alignment. Kept in the base layer (and as `start`) so Tailwind
+   utilities like text-center / text-left still win where they are used. */
+@layer base {
+  [dir="rtl"] * {
+    text-align: start;
+  }
 
-[dir="rtl"] input,
-[dir="rtl"] select,
-[dir="rtl"] textarea {
-  text-align: right;
-  direction: rtl;
+  [dir="rtl"] input,
+  [dir="rtl"] select,
+  [dir="rtl"] textarea {
+    text-align: start;
+    direction: rtl;
+  }
 }
 
 

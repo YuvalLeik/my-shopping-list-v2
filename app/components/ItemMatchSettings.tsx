@@ -85,7 +85,7 @@ export function ItemMatchSettings({ userId, onClose }: ItemMatchSettingsProps) {
   }
 
   return (
-    <Card className="fixed bottom-24 left-6 w-[420px] max-h-[80vh] shadow-2xl border-slate-200 bg-white dark:bg-slate-900 z-[60] [dir=rtl]:left-auto [dir=rtl]:right-6 flex flex-col overflow-hidden">
+    <Card className="fixed bottom-24 left-6 w-[420px] max-h-[80dvh] shadow-2xl border-slate-200 bg-white dark:bg-slate-900 z-[60] [dir=rtl]:left-auto [dir=rtl]:right-6 flex flex-col overflow-hidden">
       <CardHeader className="pb-2 flex-shrink-0">
         <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
           <CardTitle className="text-lg text-slate-900 dark:text-slate-50">

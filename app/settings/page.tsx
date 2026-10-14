@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
 import { SettingsContent } from '@/components/SettingsContent';
+import { ChainPreferences } from '@/components/ChainPreferences';
 import { fetchLocalUsers, LocalUser } from '@/lib/localUsers';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -84,7 +85,10 @@ function SettingsPageContent() {
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8 max-w-5xl">
         {activeUserId ? (
-          <SettingsContent userId={activeUserId} />
+          <>
+            <ChainPreferences userId={activeUserId} />
+            <SettingsContent userId={activeUserId} />
+          </>
         ) : (
           <Card>
             <CardHeader>

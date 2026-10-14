@@ -1,17 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { ShoppingCart, Ban, ChevronDown, Plus, CheckCircle2, Pencil, X } from 'lucide-react';
+import { ShoppingCart, Ban, ChevronDown, Plus, CheckCircle2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { t } from '@/lib/translations';
 import type { GroceryItem } from '@/lib/groceryItems';
 import type { DailyPriceRecommendationResult } from '@/lib/analytics';
+import { CategoryGroup, CollapseAllButton } from '@/components/CategoryGroup';
+import { CheapestStoreBanner } from '@/components/CheapestStoreBanner';
+import { groupItemsByCategory, useCollapsedCategories } from '@/lib/categoryGroups';
 
 interface ShoppingViewProps {
+  listId: string | null;
   items: GroceryItem[];
   listTitle: string;
   listAvgPrices: Map<string, number>;
   marketBanner: DailyPriceRecommendationResult | null;
+  priceRefreshing: boolean;
+  onRefreshPrices: () => void;
   updatingItemId: string | null;
   onToggleCollected: (item: GroceryItem) => void;
   onToggleUnavailable: (item: GroceryItem) => void;
@@ -121,10 +127,13 @@ function ShoppingItemRow({
 }
 
 export default function ShoppingView({
+  listId,
   items,
   listTitle,
   listAvgPrices,
   marketBanner,
+  priceRefreshing,
+  onRefreshPrices,
   updatingItemId,
   onToggleCollected,
   onToggleUnavailable,
@@ -134,7 +143,7 @@ export default function ShoppingView({
 }: ShoppingViewProps) {
   const [collectedExpanded, setCollectedExpanded] = useState(false);
   const [unavailableExpanded, setUnavailableExpanded] = useState(true);
-  const [hintDismissed, setHintDismissed] = useState(false);
+  const { collapsed, toggle, setAll } = useCollapsedCategories(listId ? `shop:${listId}` : null);
 
   const unitPrice = (item: GroceryItem): number | null => {
     if (item.estimated_price != null && item.estimated_price > 0) return item.estimated_price;
@@ -152,16 +161,11 @@ export default function ShoppingView({
   const collectedTotal = collected.reduce((s, i) => s + (unitPrice(i) ?? 0) * i.quantity, 0);
   const estimatedTotal = items.reduce((s, i) => s + (unitPrice(i) ?? 0) * i.quantity, 0);
 
-  // Group pending items by category (Hebrew-sorted, same convention as the cart)
-  const grouped = new Map<string, GroceryItem[]>();
-  for (const item of pending) {
-    const cat = item.category || 'ללא קטגוריה';
-    if (!grouped.has(cat)) grouped.set(cat, []);
-    grouped.get(cat)!.push(item);
-  }
-  grouped.forEach((list) => list.sort((a, b) => a.name.localeCompare(b.name, 'he')));
-
-  const cheapest = marketBanner?.recommendations?.[0];
+  // Pending items grouped in store-walk order. A category disappears once all
+  // its items are collected, so finished aisles fold away on their own.
+  const grouped = groupItemsByCategory(pending);
+  const groupKeys = grouped.map(([c]) => c);
+  const allCollapsed = groupKeys.length > 0 && groupKeys.every((k) => collapsed.has(k));
 
   return (
     <div className="flex-1 min-h-0 flex flex-col w-full max-w-2xl mx-auto">
@@ -205,16 +209,15 @@ export default function ShoppingView({
           <span>{progress}%</span>
         </div>
 
-        {/* Cheapest store hint */}
-        {cheapest && !hintDismissed && (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/25 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 text-xs text-emerald-800 dark:text-emerald-300">
-            <span className="flex-1 text-right">
-              💡 {t.cheapestHint(cheapest.chainName, Math.round(cheapest.totalBasketCost))}
-            </span>
-            <button onClick={() => setHintDismissed(true)} aria-label={t.cancel} className="flex-shrink-0 text-emerald-500 hover:text-emerald-700">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
+        {/* Cheapest of the family's chains for what's left to buy */}
+        {pending.length > 0 && (
+          <CheapestStoreBanner
+            result={marketBanner}
+            listItemCount={pending.length}
+            refreshing={priceRefreshing}
+            onRefresh={onRefreshPrices}
+            compact
+          />
         )}
       </div>
 
@@ -232,26 +235,30 @@ export default function ShoppingView({
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t.allCollectedHint}</p>
           </div>
         ) : (
-          Array.from(grouped.entries()).map(([category, categoryItems]) => (
-            <div key={category}>
-              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2 text-right">
-                {category} ({categoryItems.length})
-              </h3>
-              <div className="space-y-2">
-                {categoryItems.map((item) => (
-                  <ShoppingItemRow
-                    key={item.id}
-                    item={item}
-                    variant="pending"
-                    unitPrice={unitPrice(item)}
-                    busy={updatingItemId === item.id}
-                    onToggle={() => onToggleCollected(item)}
-                    onUnavailable={() => onToggleUnavailable(item)}
-                  />
-                ))}
+          <>
+            {groupKeys.length > 1 && (
+              <div className="flex justify-end -mb-2">
+                <CollapseAllButton allCollapsed={allCollapsed} onClick={() => setAll(groupKeys, !allCollapsed)} />
               </div>
-            </div>
-          ))
+            )}
+            {grouped.map(([category, categoryItems]) => (
+              <CategoryGroup key={category} category={category} count={categoryItems.length} collapsed={collapsed.has(category)} onToggle={() => toggle(category)}>
+                <div className="space-y-2">
+                  {categoryItems.map((item) => (
+                    <ShoppingItemRow
+                      key={item.id}
+                      item={item}
+                      variant="pending"
+                      unitPrice={unitPrice(item)}
+                      busy={updatingItemId === item.id}
+                      onToggle={() => onToggleCollected(item)}
+                      onUnavailable={() => onToggleUnavailable(item)}
+                    />
+                  ))}
+                </div>
+              </CategoryGroup>
+            ))}
+          </>
         )}
 
         {/* Unavailable section */}

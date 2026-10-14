@@ -7,7 +7,7 @@ import ShoppingView from '@/components/ShoppingView';
 import { fetchPurchaseRecordsByListId, fetchStandalonePurchaseRecords, deletePurchaseRecord, PurchaseRecordWithItems } from '@/lib/purchaseRecords';
 import { fetchGroceryItems, createGroceryItem, deleteGroceryItem, updateGroceryItem, getAllItemNames, getItemCategoryByName, GroceryItem } from '@/lib/groceryItems';
 import { uploadItemImage } from '@/lib/storage';
-import { getShoppingItemByName, upsertShoppingItemImageByName, normalizeItemName } from '@/lib/shoppingItems';
+import { getShoppingItemByName, upsertShoppingItemImageByName, normalizeItemName, upsertShoppingItemToCatalog, forceUpdateShoppingItemByName } from '@/lib/shoppingItems';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,6 +46,14 @@ import { CATEGORIES, MOST_ORDERED, MOST_ORDERED_MIN_FREQUENCY } from '@/lib/cate
 import { getItemAveragePrice, getItemAveragePrices, recordPrices } from '@/lib/itemPrices';
 import { getDailyPriceRecommendationForList, DailyPriceRecommendationResult } from '@/lib/analytics';
 import { GroceryItemRow } from '@/components/GroceryItemRow';
+import { SuggestionsRail } from '@/components/SuggestionsRail';
+import { getListSuggestions, ItemSuggestion, SuggestionKind } from '@/lib/suggestions';
+import { CheapestStoreBanner } from '@/components/CheapestStoreBanner';
+import { suggestCategory, categorizeWithAI } from '@/lib/autoCategory';
+import { guessCategoryByKeywords } from '@/lib/categoryKeywords';
+import { parseBulkItems } from '@/lib/bulkAdd';
+import { CategoryGroup, CollapseAllButton } from '@/components/CategoryGroup';
+import { groupItemsByCategory, useCollapsedCategories } from '@/lib/categoryGroups';
 
 export default function Home() {
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
@@ -57,6 +65,11 @@ export default function Home() {
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [newItemName, setNewItemName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('ללא קטגוריה');
+  // True once the user picks a category by hand: stops auto-suggest from
+  // overwriting it, and makes their choice win in the shared catalog.
+  const [categoryTouched, setCategoryTouched] = useState(false);
+  const [categoryAutoSource, setCategoryAutoSource] = useState<string | null>(null);
+  const [categorizing, setCategorizing] = useState(false);
   const [newItemQuantity, setNewItemQuantity] = useState(1);
   const [newItemPrice, setNewItemPrice] = useState<string>('');
   const [priceDialogItem, setPriceDialogItem] = useState<GroceryItem | null>(null);
@@ -114,7 +127,10 @@ export default function Home() {
   const [completedListsForDropdown, setCompletedListsForDropdown] = useState<GroceryList[]>([]);
   const [purchaseDisplayInfo, setPurchaseDisplayInfo] = useState<Map<string, { canonicalName: string; imageUrl: string | null }>>(new Map());
   const [marketBanner, setMarketBanner] = useState<DailyPriceRecommendationResult | null>(null);
-  const [marketBannerDismissed, setMarketBannerDismissed] = useState(false);
+  const [priceRefreshing, setPriceRefreshing] = useState(false);
+  // History-based suggestions (computed once per user; filtered against the list on render)
+  const [historySuggestions, setHistorySuggestions] = useState<Record<SuggestionKind, ItemSuggestion[]> | null>(null);
+  const [marketRefreshTrigger, setMarketRefreshTrigger] = useState(0);
   // Storefront catalog (supermarket-style front page)
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
@@ -130,6 +146,7 @@ export default function Home() {
   // Average prices (from personal history) for items in the current list, used
   // as a fallback so the basket total reflects items added without a stored price.
   const [listAvgPrices, setListAvgPrices] = useState<Map<string, number>>(new Map());
+  const { collapsed: collapsedCats, toggle: toggleCat, setAll: setAllCats } = useCollapsedCategories(selectedListId);
 
 
   // Load all item names for autocomplete from global catalog (shopping_items)
@@ -227,6 +244,8 @@ export default function Home() {
     setListTitle('');
     setNewItemName('');
     setNewItemCategory('ללא קטגוריה');
+    setCategoryTouched(false);
+    setCategoryAutoSource(null);
     setNewItemQuantity(1);
     setSelectedImageFile(null);
     setImagePreview(null);
@@ -320,11 +339,44 @@ export default function Home() {
       .then((result) => {
         if (cancelled) return;
         setMarketBanner(result);
-        setMarketBannerDismissed(false);
       })
       .catch((err) => console.error("Failed to load market price banner:", err));
     return () => { cancelled = true; };
-  }, [activeUserId, items]);
+  }, [activeUserId, items, marketRefreshTrigger]);
+
+  // Re-price the current list now (small budget; recently priced items are skipped).
+  const handleRefreshPrices = async () => {
+    if (!activeUserId || priceRefreshing) return;
+    const names = items.filter((i) => !i.purchased).map((i) => i.name);
+    if (!names.length) return;
+    setPriceRefreshing(true);
+    try {
+      const res = await fetch('/api/refresh-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: activeUserId, items: names }),
+      });
+      const stats = await res.json();
+      if (!res.ok) throw new Error(stats?.error || 'refresh failed');
+      if (stats.priced > 0) {
+        toast.success(`עודכנו מחירים ל-${stats.priced} פריטים`);
+      } else if (stats.skippedFresh > 0 && stats.priced === 0 && stats.unmapped?.length === 0) {
+        toast.info('המחירים כבר עדכניים');
+      } else if (stats.stoppedEarly === 'quota') {
+        toast.error('נגמרה מכסת הבדיקות להיום — נסה מחר');
+      } else {
+        toast.info('לא נמצאו מחירים חדשים', {
+          description: stats.unmapped?.length ? `אין ברקוד ל-${stats.unmapped.length} פריטים — סריקת קבלה תעזור` : undefined,
+        });
+      }
+      setMarketRefreshTrigger((n) => n + 1);
+      setCatalogRefreshTrigger((n) => n + 1);
+    } catch {
+      toast.error('רענון המחירים נכשל');
+    } finally {
+      setPriceRefreshing(false);
+    }
+  };
 
   // Load the storefront catalog (user's items + prices + frequency)
   useEffect(() => {
@@ -338,6 +390,16 @@ export default function Home() {
       .then((entries) => { if (!cancelled) setCatalog(entries); })
       .catch((err) => console.error('Failed to load catalog:', err))
       .finally(() => { if (!cancelled) setLoadingCatalog(false); });
+    return () => { cancelled = true; };
+  }, [activeUserId, catalogRefreshTrigger]);
+
+  // Purchase-history suggestions for building the next list.
+  useEffect(() => {
+    if (!activeUserId) { setHistorySuggestions(null); return; }
+    let cancelled = false;
+    getListSuggestions(activeUserId, [])
+      .then((s) => { if (!cancelled) setHistorySuggestions(s); })
+      .catch((err) => console.error('Failed to load suggestions:', err));
     return () => { cancelled = true; };
   }, [activeUserId, catalogRefreshTrigger]);
 
@@ -364,6 +426,29 @@ export default function Home() {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, [cartOpen]);
+
+  // Auto-suggest a category while typing (history, then keyword dictionary).
+  // The AI fallback runs only on submit, so typing never costs an API call.
+  useEffect(() => {
+    if (categoryTouched || !activeUserId) return;
+    const name = newItemName.trim();
+    if (name.length < 2) {
+      setNewItemCategory('ללא קטגוריה');
+      setCategoryAutoSource(null);
+      return;
+    }
+    let cancelled = false;
+    const keyword = guessCategoryByKeywords(name);
+    const timer = setTimeout(async () => {
+      const known = await getItemCategoryByName(name, activeUserId);
+      if (cancelled) return;
+      const fromHistory = known && known !== 'ללא קטגוריה' ? known : null;
+      const picked = fromHistory || keyword;
+      setNewItemCategory(picked || 'ללא קטגוריה');
+      setCategoryAutoSource(picked ? (fromHistory ? 'לפי היסטוריה' : 'הוצע אוטומטית') : null);
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [newItemName, categoryTouched, activeUserId]);
 
   // Filter suggestions based on input
   useEffect(() => {
@@ -432,10 +517,8 @@ export default function Home() {
       // Determine category
       let categoryToUse = newItemCategory;
       if (categoryToUse === 'ללא קטגוריה') {
-        const foundCategory = await getItemCategoryByName(itemName, userId);
-        if (foundCategory) {
-          categoryToUse = foundCategory;
-        }
+        const suggested = await suggestCategory(itemName, userId);
+        if (suggested) categoryToUse = suggested.category;
       }
 
       let imageUrl: string | null = null;
@@ -480,6 +563,12 @@ export default function Home() {
         throw createError; // Fail - item not added to user's list
       }
       
+      // A hand-picked category is the family's answer for this name: let it
+      // replace whatever the shared catalog had (auto-adds only fill blanks).
+      if (categoryTouched && categoryToUse !== 'ללא קטגוריה') {
+        forceUpdateShoppingItemByName(itemName, { category: categoryToUse }).catch(() => {});
+      }
+
       // Save manually-entered price to history if user typed it in (no prior history)
       if (!isNaN(userEnteredPrice) && userEnteredPrice > 0) {
         recordPrices(userId, [{
@@ -532,6 +621,8 @@ export default function Home() {
       // Cleanup form
       setNewItemName('');
       setNewItemCategory('ללא קטגוריה');
+      setCategoryTouched(false);
+      setCategoryAutoSource(null);
       setNewItemQuantity(1);
       setNewItemPrice('');
       setSelectedImageFile(null);
@@ -588,6 +679,99 @@ export default function Home() {
     }
   };
 
+  // Pasted multi-line / comma text (e.g. a WhatsApp list) becomes many items.
+  // Categories: history, then keywords, then one batched AI call for the rest.
+  const handleBulkAdd = async (names: string[]) => {
+    if (!selectedListId || !activeUserId) return;
+    const listId = selectedListId;
+    const userId = activeUserId;
+    const existing = new Set(items.map((i) => normalizeItemName(i.name)));
+    const fresh = names.filter((n) => !existing.has(normalizeItemName(n)));
+    if (fresh.length === 0) {
+      toast.info('כל הפריטים כבר ברשימה');
+      return;
+    }
+    setAddingItem(true);
+    try {
+      const categories = new Map<string, string>();
+      await Promise.all(fresh.map(async (n) => {
+        const known = await getItemCategoryByName(n, userId);
+        const c = known && known !== 'ללא קטגוריה' ? known : guessCategoryByKeywords(n);
+        if (c) categories.set(n, c);
+      }));
+      const missing = fresh.filter((n) => !categories.has(n));
+      if (missing.length > 0) {
+        const ai = await categorizeWithAI(missing);
+        for (const [n, c] of Object.entries(ai)) {
+          categories.set(n, c);
+          upsertShoppingItemToCatalog(n, c).catch(() => {});
+        }
+      }
+      const prices = await getItemAveragePrices(userId, fresh).catch(() => new Map<string, number>());
+      let added = 0;
+      for (const n of fresh) {
+        try {
+          await createGroceryItem(listId, n, 1, categories.get(n) || 'ללא קטגוריה', null, prices.get(n) ?? null);
+          added++;
+        } catch { /* skip this one, keep going */ }
+      }
+      setItems(await fetchGroceryItems(listId, userId));
+      setNewItemName('');
+      setShowAddItemDialog(false);
+      setCatalogRefreshTrigger((prev) => prev + 1);
+      toast.success(`נוספו ${added} פריטים`, { description: fresh.length > added ? `${fresh.length - added} נכשלו` : undefined });
+    } finally {
+      setAddingItem(false);
+    }
+  };
+
+  // Changing an item's category from the list fixes it for next time too.
+  const handleCategoryChange = async (item: GroceryItem, category: string) => {
+    if (category === (item.category || 'ללא קטגוריה')) return;
+    setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, category } : i));
+    try {
+      await updateGroceryItem(item.id, { category });
+      forceUpdateShoppingItemByName(item.name, { category }).catch(() => {});
+      upsertShoppingItemToCatalog(item.name, category).catch(() => {});
+    } catch {
+      setItems((prev) => prev.map((i) => i.id === item.id ? item : i));
+      toast.error('לא הצלחתי לעדכן קטגוריה');
+    }
+  };
+
+  // One tap to sort everything still sitting in "ללא קטגוריה".
+  const handleAutoCategorize = async () => {
+    const pending = items.filter((i) => !i.category || i.category === 'ללא קטגוריה');
+    if (pending.length === 0) return;
+    setCategorizing(true);
+    try {
+      const picks = new Map<string, string>();
+      for (const i of pending) {
+        const c = guessCategoryByKeywords(i.name);
+        if (c) picks.set(i.id, c);
+      }
+      const rest = pending.filter((i) => !picks.has(i.id));
+      if (rest.length > 0) {
+        const ai = await categorizeWithAI(rest.map((i) => i.name));
+        for (const i of rest) if (ai[i.name]) picks.set(i.id, ai[i.name]);
+      }
+      let n = 0;
+      for (const i of pending) {
+        const c = picks.get(i.id);
+        if (!c) continue;
+        try {
+          await updateGroceryItem(i.id, { category: c });
+          upsertShoppingItemToCatalog(i.name, c).catch(() => {});
+          n++;
+        } catch { /* keep going */ }
+      }
+      setItems((prev) => prev.map((i) => picks.has(i.id) ? { ...i, category: picks.get(i.id) } : i));
+      toast.success(n > 0 ? `סודרו ${n} פריטים לקטגוריות` : 'לא מצאתי קטגוריה מתאימה');
+    } finally {
+      setCategorizing(false);
+    }
+  };
+
   const handleOpenAddPrice = (item: GroceryItem) => {
     setPriceDialogItem(item);
     setPriceDialogValue(item.estimated_price != null ? item.estimated_price.toFixed(2) : '');
@@ -622,9 +806,21 @@ export default function Home() {
     setDeletingItemId(itemId);
     try {
       await deleteGroceryItem(itemId);
-      setItems(items.filter(i => i.id !== itemId));
+      setItems((prev) => prev.filter(i => i.id !== itemId));
       toast.success(t.itemDeleted, {
         description: item ? t.itemDeletedDescription(item.name) : t.itemDeletedDescription('Item'),
+        duration: 5000,
+        action: item ? {
+          label: 'בטל',
+          onClick: async () => {
+            try {
+              const restored = await createGroceryItem(item.list_id, item.name, item.quantity, item.category || 'ללא קטגוריה', item.image_url ?? null, item.estimated_price ?? null);
+              setItems((prev) => [restored, ...prev]);
+            } catch {
+              toast.error('לא הצלחתי לשחזר את הפריט');
+            }
+          },
+        } : undefined,
       });
     } catch (err) {
       toast.error(t.failedToDeleteItem, {
@@ -965,17 +1161,19 @@ export default function Home() {
   };
 
   const handleTogglePurchased = async (item: GroceryItem) => {
+    // Optimistic: flip immediately (this is tapped dozens of times per trip),
+    // then reconcile with the server row or roll back on failure.
     const itemId = item.id;
-    setUpdatingItemId(itemId);
+    const optimistic = { ...item, purchased: !item.purchased, unavailable: false };
+    setItems((prev) => prev.map(i => i.id === itemId ? optimistic : i));
     try {
-      const updatedItem = await updateGroceryItem(itemId, { purchased: !item.purchased, unavailable: false });
-      setItems((prev) => [updatedItem, ...prev.filter(i => i.id !== updatedItem.id)]);
+      const updatedItem = await updateGroceryItem(itemId, { purchased: optimistic.purchased, unavailable: false });
+      setItems((prev) => prev.map(i => i.id === itemId ? updatedItem : i));
     } catch (err) {
+      setItems((prev) => prev.map(i => i.id === itemId ? item : i));
       toast.error('נכשל בעדכון סטטוס הפריט', {
         description: err instanceof Error ? err.message : 'Unknown error',
       });
-    } finally {
-      setUpdatingItemId(null);
     }
   };
 
@@ -1037,6 +1235,18 @@ export default function Home() {
   };
 
   // --- Storefront catalog handlers ---
+
+  const suggestionToEntry = (s: ItemSuggestion): CatalogEntry =>
+    catalog.find((c) => normalizeItemName(c.name) === normalizeItemName(s.name)) ?? {
+      name: s.name, image_url: null, category: s.category, avgPrice: null,
+      cheapestChain: null, cheapestPrice: null, frequency: s.timesBought,
+    };
+
+  const handleAddSuggestion = (s: ItemSuggestion) => handleAddFromCatalog(suggestionToEntry(s));
+
+  const handleAddAllSuggestions = async (list: ItemSuggestion[]) => {
+    for (const s of list) await handleAddFromCatalog(suggestionToEntry(s));
+  };
 
   const handleAddFromCatalog = async (entry: CatalogEntry) => {
     if (!selectedListId || !activeUserId) return;
@@ -1562,10 +1772,13 @@ export default function Home() {
             <>
             {uiMode === 'shop' && (
               <ShoppingView
+                listId={selectedListId}
                 items={items}
                 listTitle={listTitle}
                 listAvgPrices={listAvgPrices}
                 marketBanner={marketBanner}
+                priceRefreshing={priceRefreshing}
+                onRefreshPrices={handleRefreshPrices}
                 updatingItemId={updatingItemId}
                 onToggleCollected={handleTogglePurchased}
                 onToggleUnavailable={handleToggleUnavailable}
@@ -1612,6 +1825,24 @@ export default function Home() {
                       {viewingPreviousListId ? previousListCardContent : standalonePurchaseCardContent}
                     </div>
                   )}
+                  {!catalogSearch.trim() && !categoryFilter && historySuggestions && (() => {
+                    const onList = new Set(items.map((i) => normalizeItemName(i.name)));
+                    const visible = {
+                      due: historySuggestions.due.filter((x) => !onList.has(normalizeItemName(x.name))),
+                      staple: historySuggestions.staple.filter((x) => !onList.has(normalizeItemName(x.name))),
+                      forgotten: historySuggestions.forgotten.filter((x) => !onList.has(normalizeItemName(x.name))),
+                    };
+                    return (
+                      <div className="mb-4">
+                        <SuggestionsRail
+                          suggestions={visible}
+                          busyNames={busyCatalogNames}
+                          onAdd={handleAddSuggestion}
+                          onAddAll={handleAddAllSuggestions}
+                        />
+                      </div>
+                    );
+                  })()}
                   {loadingCatalog && catalog.length === 0 ? (
                     <div className="flex items-center justify-center py-16 text-slate-500 dark:text-slate-400">
                       <Loader2 className="h-5 w-5 animate-spin me-2 text-emerald-600 dark:text-emerald-400" />
@@ -1644,7 +1875,7 @@ export default function Home() {
 
                 {/* Cart panel: desktop scrolling column / mobile bottom sheet */}
                 <div
-                  className={`fixed inset-x-0 bottom-0 z-50 flex flex-col max-h-[85vh] rounded-t-2xl bg-slate-50 dark:bg-slate-950 shadow-2xl transition-transform duration-300 ${cartOpen ? 'translate-y-0' : 'translate-y-full'} lg:static lg:z-0 lg:flex lg:w-[380px] lg:shrink-0 lg:max-h-none lg:h-full lg:translate-y-0 lg:rounded-xl lg:shadow-none lg:bg-transparent lg:dark:bg-transparent`}
+                  className={`fixed inset-x-0 bottom-0 z-50 flex flex-col max-h-[85dvh] rounded-t-2xl bg-slate-50 dark:bg-slate-950 shadow-2xl transition-transform duration-300 ${cartOpen ? 'translate-y-0' : 'translate-y-full'} lg:static lg:z-0 lg:flex lg:w-[380px] lg:shrink-0 lg:max-h-none lg:h-full lg:translate-y-0 lg:rounded-xl lg:shadow-none lg:bg-transparent lg:dark:bg-transparent`}
                 >
                 {/* Mobile-only cart header with close button */}
                 <div className="lg:hidden shrink-0 flex items-center justify-between bg-slate-50 dark:bg-slate-950 px-4 py-2 border-b border-slate-200 dark:border-slate-800">
@@ -1663,7 +1894,7 @@ export default function Home() {
                 >
                 {/* Add New Item Dialog (opened from storefront "new item" button) */}
                 <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
-                  <DialogContent className="max-h-[90vh] overflow-y-auto" dir="rtl">
+                  <DialogContent className="max-h-[90dvh] overflow-y-auto" dir="rtl">
                     <DialogHeader>
                       <DialogTitle className="text-right">{t.addNewItem}</DialogTitle>
                     </DialogHeader>
@@ -1678,6 +1909,13 @@ export default function Home() {
                           type="text"
                           value={newItemName}
                           onChange={(e) => setNewItemName(e.target.value)}
+                          onPaste={(e) => {
+                            const names = parseBulkItems(e.clipboardData.getData('text'));
+                            if (names.length > 1) {
+                              e.preventDefault();
+                              handleBulkAdd(names);
+                            }
+                          }}
                           onFocus={() => {
                             if (newItemName.trim().length > 0 && filteredSuggestions.length > 0) {
                               setShowSuggestions(true);
@@ -1711,10 +1949,13 @@ export default function Home() {
                       <div>
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 sm:mb-2 block text-right">
                           קטגוריה
+                          {categoryAutoSource && (
+                            <span className="ms-2 text-xs font-normal text-blue-600 dark:text-blue-400">✨ {categoryAutoSource}</span>
+                          )}
                         </label>
                         <Select 
                           value={newItemCategory} 
-                          onValueChange={setNewItemCategory}
+                          onValueChange={(v) => { setNewItemCategory(v); setCategoryTouched(true); setCategoryAutoSource(null); }}
                           disabled={addingItem}
                         >
                           <SelectTrigger className="w-full">
@@ -2019,38 +2260,35 @@ export default function Home() {
                         return a.name.localeCompare(b.name, 'he');
                       };
                       
-                      // Group items by category if sortMode is 'category'
-                      const groupByCategory = (itemsList: GroceryItem[]) => {
-                        if (sortMode === 'alpha') {
-                          return { 'כל הפריטים': itemsList.sort(sortByName) };
-                        }
-                        
-                        const grouped = new Map<string, GroceryItem[]>();
-                        itemsList.forEach(item => {
-                          const category = item.category || 'ללא קטגוריה';
-                          if (!grouped.has(category)) {
-                            grouped.set(category, []);
-                          }
-                          grouped.get(category)!.push(item);
-                        });
-                        
-                        // Sort items within each category
-                        grouped.forEach((categoryItems, category) => {
-                          grouped.set(category, categoryItems.sort(sortByName));
-                        });
-                        
-                        // Convert to object for easier rendering
-                        const result: Record<string, GroceryItem[]> = {};
-                        grouped.forEach((categoryItems, category) => {
-                          result[category] = categoryItems;
-                        });
-                        return result;
-                      };
-                      
-                      const groupedNotPurchased = groupByCategory(notPurchasedItems);
-                      const groupedUnavailable = groupByCategory(unavailableItems);
-                      const groupedPurchased = groupByCategory(purchasedItems);
-                      
+                      const renderRow = (item: GroceryItem, variant: 'active' | 'purchased' | 'unavailable') => (
+                        <GroceryItemRow key={item.id} item={item} variant={variant} onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} onAddPrice={variant === 'active' ? handleOpenAddPrice : undefined} onCategoryChange={handleCategoryChange} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
+                      );
+
+                      // Category mode: collapsible groups in store-walk order. Collapse
+                      // keys are namespaced per section so "collected" groups fold independently.
+                      const renderItems = (
+                        list: GroceryItem[],
+                        variant: 'active' | 'purchased' | 'unavailable',
+                        tone: 'primary' | 'muted'
+                      ) => sortMode === 'category' ? (
+                        groupItemsByCategory(list).map(([category, categoryItems]) => {
+                          const key = `${variant}:${category}`;
+                          return (
+                            <CategoryGroup key={key} category={category} count={categoryItems.length} collapsed={collapsedCats.has(key)} onToggle={() => toggleCat(key)} tone={tone}>
+                              <ul className="space-y-2 sm:space-y-3">{categoryItems.map((item) => renderRow(item, variant))}</ul>
+                            </CategoryGroup>
+                          );
+                        })
+                      ) : (
+                        <ul className="space-y-2 sm:space-y-3">{[...list].sort(sortByName).map((item) => renderRow(item, variant))}</ul>
+                      );
+
+                      const activeGroupKeys = sortMode === 'category'
+                        ? groupItemsByCategory(notPurchasedItems).map(([c]) => `active:${c}`)
+                        : [];
+                      const uncategorizedCount = notPurchasedItems.filter((i) => !i.category || i.category === 'ללא קטגוריה').length;
+                      const allActiveCollapsed = activeGroupKeys.length > 0 && activeGroupKeys.every((k) => collapsedCats.has(k));
+
                       const predictedTotalRounded = cartEstimatedTotal;
                       const allPriced = cartPricedCount >= items.length;
 
@@ -2146,24 +2384,13 @@ export default function Home() {
                             )}
                           </div>
                           
-                          {/* Market price banner */}
-                          {!marketBannerDismissed && marketBanner && marketBanner.recommendations.length > 0 && items.length > 0 && (() => {
-                            const cheapest = marketBanner.recommendations[0];
-                            return (
-                              <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 text-sm">
-                                <span className="text-emerald-700 dark:text-emerald-300 flex-1">
-                                  לפי הרשימה שלך, <strong>{cheapest.chainName}</strong> הכי זול היום (כ-₪{cheapest.totalBasketCost.toFixed(0)} ל-{marketBanner.coveredItems} פריטים).
-                                </span>
-                                <button
-                                  onClick={() => setMarketBannerDismissed(true)}
-                                  className="text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-300 flex-shrink-0"
-                                >
-                                  <X className="h-4 w-4" />
-                                </button>
-                              </div>
-                            );
-                          })()}
-
+                          {/* Cheapest of the family's chains for this list */}
+                          <CheapestStoreBanner
+                            result={marketBanner}
+                            listItemCount={notPurchasedItems.length + unavailableItems.length}
+                            refreshing={priceRefreshing}
+                            onRefresh={handleRefreshPrices}
+                          />
 
                           {/* Empty States */}
                           {searchQuery.trim() && filteredItems.length === 0 && (
@@ -2206,28 +2433,25 @@ export default function Home() {
                           {/* Items not yet purchased */}
                           {notPurchasedItems.length > 0 && (
                             <div>
-                              {sortMode === 'category' ? (
-                                // Grouped by category
-                                Object.entries(groupedNotPurchased).map(([category, categoryItems]) => (
-                                  <div key={category} className="mb-6">
-                                    <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-3 text-right">
-                                      {category} ({categoryItems.length})
-                                    </h3>
-                                    <ul className="space-y-2 sm:space-y-3">
-                                      {categoryItems.map((item) => (
-                                        <GroceryItemRow key={item.id} item={item} variant="active" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} onAddPrice={handleOpenAddPrice} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ))
-                              ) : (
-                                // Alphabetical list
-                                <ul className="space-y-2 sm:space-y-3">
-                                  {groupedNotPurchased['כל הפריטים']?.map((item) => (
-                                    <GroceryItemRow key={item.id} item={item} variant="active" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} onAddPrice={handleOpenAddPrice} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
-                                  ))}
-                                </ul>
+                              {(activeGroupKeys.length > 1 || uncategorizedCount > 0) && (
+                                <div className="flex items-center justify-between gap-2 -mt-2 mb-1">
+                                  {uncategorizedCount > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={handleAutoCategorize}
+                                      disabled={categorizing}
+                                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 rounded-full px-3 py-1.5 min-h-[36px] disabled:opacity-60"
+                                    >
+                                      {categorizing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <span aria-hidden>✨</span>}
+                                      סדר {uncategorizedCount} פריטים לקטגוריות
+                                    </button>
+                                  ) : <span />}
+                                  {activeGroupKeys.length > 1 && (
+                                    <CollapseAllButton allCollapsed={allActiveCollapsed} onClick={() => setAllCats(activeGroupKeys, !allActiveCollapsed)} />
+                                  )}
+                                </div>
                               )}
+                              {renderItems(notPurchasedItems, 'active', 'primary')}
                             </div>
                           )}
 
@@ -2252,28 +2476,7 @@ export default function Home() {
                                   purchasedItemsExpanded ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
                                 }`}
                               >
-                                {sortMode === 'category' ? (
-                                // Grouped by category
-                                Object.entries(groupedPurchased).map(([category, categoryItems]) => (
-                                  <div key={category} className="mb-6">
-                                    <h4 className="text-xs font-medium text-slate-500 dark:text-slate-500 mb-2 text-right">
-                                      {category} ({categoryItems.length})
-                                    </h4>
-                                    <ul className="space-y-2 sm:space-y-3">
-                                      {categoryItems.map((item) => (
-                                        <GroceryItemRow key={item.id} item={item} variant="purchased" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ))
-                              ) : (
-                                // Alphabetical list for purchased items
-                                <ul className="space-y-2 sm:space-y-3">
-                                  {groupedPurchased['כל הפריטים']?.map((item) => (
-                                    <GroceryItemRow key={item.id} item={item} variant="purchased" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
-                                  ))}
-                                </ul>
-                              )}
+                                {renderItems(purchasedItems, 'purchased', 'muted')}
                             </div>
                           </div>
                         )}
@@ -2299,26 +2502,7 @@ export default function Home() {
                                   unavailableItemsExpanded ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
                                 }`}
                               >
-                                {sortMode === 'category' ? (
-                                  Object.entries(groupedUnavailable).map(([category, categoryItems]) => (
-                                    <div key={category} className="mb-6">
-                                      <h4 className="text-xs font-medium text-amber-600 dark:text-amber-500 mb-2 text-right">
-                                        {category} ({categoryItems.length})
-                                      </h4>
-                                      <ul className="space-y-2 sm:space-y-3">
-                                        {categoryItems.map((item) => (
-                                          <GroceryItemRow key={item.id} item={item} variant="unavailable" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <ul className="space-y-2 sm:space-y-3">
-                                    {groupedUnavailable['כל הפריטים']?.map((item) => (
-                                      <GroceryItemRow key={item.id} item={item} variant="unavailable" onTogglePurchased={handleTogglePurchased} onToggleUnavailable={handleToggleUnavailable} onQuantityChange={handleQuantityChange} onDelete={handleDeleteItem} onUpdateImage={handleUpdateItemImage} avgFallbackPrice={listAvgPrices.get(item.name) ?? null} updatingItemId={updatingItemId} deletingItemId={deletingItemId} uploadingImageForItem={uploadingImageForItem} selectionModeActive={selectionModeActive} selectedItemIds={selectedItemIds} toggleItemSelection={toggleItemSelection} bulkDeleting={bulkDeleting} />
-                                    ))}
-                                  </ul>
-                                )}
+                                {renderItems(unavailableItems, 'unavailable', 'muted')}
                               </div>
                             </div>
                           )}

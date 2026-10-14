@@ -453,7 +453,7 @@ export function Sidebar({
     <>
       {/* Desktop Sidebar - pinned column, collapsible to a slim icon rail */}
       <aside
-        className={`hidden md:flex ${collapsed ? 'w-14' : 'w-64'} h-screen sticky top-0 flex-col border-l border-r border-slate-200/50 dark:border-slate-800/50 shadow-lg [dir=rtl]:border-l-0 [dir=ltr]:border-r-0 transition-[width] duration-300 overflow-hidden`}
+        className={`hidden md:flex ${collapsed ? 'w-14' : 'w-64'} h-dvh sticky top-0 flex-col border-l border-r border-slate-200/50 dark:border-slate-800/50 shadow-lg [dir=rtl]:border-l-0 [dir=ltr]:border-r-0 transition-[width] duration-300 overflow-hidden`}
       >
         {collapsed ? (
           <div className="h-full flex flex-col items-center gap-1.5 py-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">

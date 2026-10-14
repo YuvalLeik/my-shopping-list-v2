@@ -4,6 +4,7 @@ import { Loader2, ShoppingCart, Plus, Trash2, Minus, Camera, Ban, Undo2 } from '
 import { Button } from '@/components/ui/button';
 import { t } from '@/lib/translations';
 import type { GroceryItem } from '@/lib/groceryItems';
+import { CATEGORIES } from '@/lib/categories';
 
 interface GroceryItemRowProps {
   item: GroceryItem;
@@ -14,6 +15,8 @@ interface GroceryItemRowProps {
   onDelete: (itemId: string) => void;
   onUpdateImage: (itemId: string, file: File) => void;
   onAddPrice?: (item: GroceryItem) => void;
+  /** When set, the category label becomes a picker (fixing it also teaches the catalog). */
+  onCategoryChange?: (item: GroceryItem, category: string) => void;
   /** Average price from history, used when the item has no stored estimated_price */
   avgFallbackPrice?: number | null;
   updatingItemId: string | null;
@@ -34,6 +37,7 @@ export function GroceryItemRow({
   onDelete,
   onUpdateImage,
   onAddPrice,
+  onCategoryChange,
   avgFallbackPrice,
   updatingItemId,
   deletingItemId,
@@ -180,9 +184,23 @@ export function GroceryItemRow({
         <div className="font-medium text-sm sm:text-base text-slate-700 dark:text-slate-200 line-clamp-2 break-words">
           {item.name}
         </div>
-        <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          {item.category || 'ללא קטגוריה'}
-        </div>
+        {onCategoryChange ? (
+          // Native select: opens the OS picker on phones, no custom popover needed.
+          <select
+            value={item.category || 'ללא קטגוריה'}
+            onChange={(e) => onCategoryChange(item, e.target.value)}
+            aria-label="שנה קטגוריה"
+            className={`mt-0.5 max-w-full bg-transparent text-xs sm:text-sm rounded cursor-pointer hover:text-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-400 ${
+              !item.category || item.category === 'ללא קטגוריה' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        ) : (
+          <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            {item.category || 'ללא קטגוריה'}
+          </div>
+        )}
         {unitPrice != null ? (
           <button
             type="button"
