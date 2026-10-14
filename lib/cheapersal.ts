@@ -1,3 +1,5 @@
+import { chainFamily } from './chains';
+
 const BASE_URL = 'https://api.cheapersal.co.il/api/v1';
 
 function getApiKey(): string {
@@ -42,7 +44,7 @@ export interface CheapersalPriceEntry {
 interface RawPriceEntry {
   price: number;
   chain: { id: string; name: string };
-  branch: { id: string; name: string; city?: string };
+  branch: { id: string; name: string; city?: string; isOnline?: boolean };
   promo: { description: string; discountRate?: number } | null;
 }
 
@@ -92,23 +94,100 @@ export async function getProductByBarcode(barcode: string): Promise<CheapersalPr
   return data;
 }
 
-export async function getProductPrices(barcode: string): Promise<CheapersalPriceEntry[]> {
-  const data = await apiFetch<PricesResponseData>(`/products/${barcode}/prices`);
-  if (!data?.prices) return [];
-  const seen = new Set<string>();
-  const results: CheapersalPriceEntry[] = [];
-  for (const entry of data.prices) {
-    if (seen.has(entry.chain.id)) continue;
-    seen.add(entry.chain.id);
-    results.push({
-      chainId: entry.chain.id,
-      chainName: entry.chain.name,
-      branchId: entry.branch?.id,
-      branchName: entry.branch?.name,
-      price: entry.price,
+export type PriceLookupStatus = 'ok' | 'not_found' | 'quota' | 'error';
+
+export interface AreaPriceEntry {
+  /** Preferred chain family, e.g. "שופרסל" (covers דיל / שלי / אקספרס). */
+  chainName: string;
+  /** Median shelf price across the family's physical branches in the area. */
+  price: number;
+  /** Human description of where the price comes from. */
+  branchName: string;
+  /** False when no in-area branch had the product and a national median was used. */
+  inArea: boolean;
+}
+
+export interface AreaPriceLookup {
+  status: PriceLookupStatus;
+  entries: AreaPriceEntry[];
+  productName: string | null;
+  /** Requests left today on the Cheapersal plan, when the API reports it. */
+  remaining: number | null;
+}
+
+function median(values: number[]): number {
+  const v = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(v.length / 2);
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+}
+
+/**
+ * Prices for one barcode, reduced to one price per preferred chain family.
+ * Uses physical branches in `areaCities`; falls back to the national median
+ * of physical branches (excluding VAT-free Eilat) when the area has none.
+ */
+export async function getAreaPrices(
+  barcode: string,
+  opts: { families: string[]; areaCities: string[]; excludedCities: string[] },
+): Promise<AreaPriceLookup> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/products/${encodeURIComponent(barcode)}/prices`, {
+      headers: headers(),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(45000),
+    });
+  } catch (err) {
+    console.error(`Cheapersal network error for ${barcode}:`, err);
+    return { status: 'error', entries: [], productName: null, remaining: null };
+  }
+
+  let json: { success?: boolean; data?: PricesResponseData; meta?: { usage?: { remaining?: number } } } | null = null;
+  try { json = await res.json(); } catch { /* non-JSON body */ }
+  const remaining = typeof json?.meta?.usage?.remaining === 'number' ? json.meta.usage.remaining : null;
+
+  if (res.status === 404) return { status: 'not_found', entries: [], productName: null, remaining };
+  if (res.status === 429 || res.status === 402) {
+    console.error(`Cheapersal quota/rate limit (${res.status}) for ${barcode}`);
+    return { status: 'quota', entries: [], productName: null, remaining: remaining ?? 0 };
+  }
+  if (!res.ok || !json?.success || !json.data) {
+    console.error(`Cheapersal API ${res.status} for ${barcode}`);
+    return { status: 'error', entries: [], productName: null, remaining };
+  }
+
+  const inArea = new Map<string, number[]>();
+  const national = new Map<string, number[]>();
+  for (const p of json.data.prices ?? []) {
+    if (!(p.price > 0) || p.branch?.isOnline) continue;
+    const family = chainFamily(p.chain?.name ?? '', opts.families);
+    if (!family) continue;
+    const city = p.branch?.city ?? '';
+    if (opts.excludedCities.includes(city)) continue;
+    if (!national.has(family)) national.set(family, []);
+    national.get(family)!.push(p.price);
+    if (opts.areaCities.includes(city)) {
+      if (!inArea.has(family)) inArea.set(family, []);
+      inArea.get(family)!.push(p.price);
+    }
+  }
+
+  const entries: AreaPriceEntry[] = [];
+  for (const [family, all] of national) {
+    const local = inArea.get(family);
+    entries.push({
+      chainName: family,
+      price: Math.round(median(local ?? all) * 100) / 100,
+      branchName: local ? `${local.length} סניפים באזור` : 'ממוצע ארצי',
+      inArea: !!local,
     });
   }
-  return results;
+  return {
+    status: entries.length ? 'ok' : 'not_found',
+    entries,
+    productName: json.data.product?.name ?? null,
+    remaining,
+  };
 }
 
 export async function getProductPromos(barcode: string): Promise<CheapersalPromo[]> {

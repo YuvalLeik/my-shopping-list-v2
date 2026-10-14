@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import { getUserPersonalItems } from './itemAliases';
 import { getItemAveragePrices } from './itemPrices';
+import { getUserChainPrefs } from './analytics';
+import { chainFamily } from './chains';
 
 export interface CatalogEntry {
   name: string;
@@ -62,11 +64,12 @@ export async function getCatalogWithMeta(userId: string): Promise<CatalogEntry[]
   // Average paid price (alias-aware, batched)
   const avgPrices = await getItemAveragePrices(userId, names);
 
-  // Cheapest current chain per item from market data (same 2-day window
-  // as getDailyPriceRecommendation in lib/analytics.ts)
+  // Cheapest current chain per item from market data, among the family's
+  // preferred chains (same window as getDailyPriceRecommendation).
   const cheapestByName = new Map<string, { chain: string; price: number }>();
+  const { preferredChains } = await getUserChainPrefs(userId);
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 2);
+  cutoff.setDate(cutoff.getDate() - 7);
   const { data: marketRows } = await supabase
     .from('market_price_comparisons')
     .select('item_name, chain_name, price, promo_price')
@@ -74,6 +77,8 @@ export async function getCatalogWithMeta(userId: string): Promise<CatalogEntry[]
     .gte('fetched_at', cutoff.toISOString());
   if (marketRows) {
     for (const row of marketRows) {
+      const chain = chainFamily(row.chain_name, preferredChains);
+      if (!chain) continue;
       const norm = normalize(row.item_name);
       const effective =
         row.promo_price != null && Number(row.promo_price) > 0 && Number(row.promo_price) < Number(row.price)
@@ -82,7 +87,7 @@ export async function getCatalogWithMeta(userId: string): Promise<CatalogEntry[]
       if (!(effective > 0)) continue;
       const current = cheapestByName.get(norm);
       if (!current || effective < current.price) {
-        cheapestByName.set(norm, { chain: row.chain_name, price: effective });
+        cheapestByName.set(norm, { chain, price: effective });
       }
     }
   }

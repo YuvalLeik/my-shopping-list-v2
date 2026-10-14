@@ -55,7 +55,7 @@ const DrawerContent = React.forwardRef<
         ? "translate-x-full data-[state=open]:translate-x-0"
         : "-translate-x-full data-[state=open]:translate-x-0"
   const sizeClass = actualSide === "bottom"
-    ? "w-full max-h-[85vh] rounded-t-2xl"
+    ? "w-full max-h-[85dvh] rounded-t-2xl"
     : "h-full w-[280px]"
 
   return (

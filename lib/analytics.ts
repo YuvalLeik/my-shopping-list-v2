@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { getSpendingByMonth as getSpendingByMonthFromPrices, getAverageItemPrices, getItemPriceHistory, getStorePriceComparison, PricePoint, StorePriceComparison, MonthlySpending } from './itemPrices';
+import { chainFamily, prefsFromUserRow, ChainPrefs } from './chains';
 
 export type { PricePoint, StorePriceComparison, MonthlySpending };
 
@@ -712,22 +713,18 @@ export interface DailyPriceRecommendationResult {
   storeCount: number;
 }
 
-const MAJOR_CHAINS = [
-  'שופרסל', 'רמי לוי', 'יינות ביתן', 'ביתן מרקט', 'ויקטורי',
-  'אושר עד', 'מחסני השוק', 'חצי חינם', 'יוחננוף', 'סופר פארם',
-  'טיב טעם', 'קרפור', 'מגה', 'שוק העיר', 'סטופ מרקט', 'יילו',
-];
+/** Price rows older than this are ignored (the cron refreshes daily). */
+const PRICE_WINDOW_DAYS = 7;
 
-function isMajorChain(chainName: string): boolean {
-  const normalized = chainName.trim();
-  return MAJOR_CHAINS.some(
-    (major) => normalized === major || normalized.startsWith(major) || major.startsWith(normalized)
-  );
+/** The family's chain preferences (falls back to defaults until the migration is applied). */
+export async function getUserChainPrefs(userId: string): Promise<ChainPrefs> {
+  const { data } = await supabase.from('local_users').select('*').eq('id', userId).maybeSingle();
+  return prefsFromUserRow(data);
 }
 
 function aggregateChainPrices(
   data: Array<{ item_name: string; chain_name: string; price: number; promo_price: number | null; promo_description: string | null; fetched_at: string }>,
-  filterMajorChains: boolean,
+  families: string[] | null,
   maxChains?: number,
 ): { recommendations: StoreRecommendation[]; fetchedAt: string; coveredItems: number } {
   const fetchedAt = data[0].fetched_at;
@@ -735,8 +732,9 @@ function aggregateChainPrices(
   // Pass 1: collect each chain's real prices per item.
   const chainMap = new Map<string, Map<string, MarketItemPrice>>();
   for (const row of data) {
-    const chain = row.chain_name;
-    if (filterMajorChains && !isMajorChain(chain)) continue;
+    // Rows are stored per chain family; older rows may carry sub-chain names.
+    const chain = families ? chainFamily(row.chain_name, families) : row.chain_name;
+    if (!chain) continue;
 
     if (!chainMap.has(chain)) chainMap.set(chain, new Map());
     const items = chainMap.get(chain)!;
@@ -747,6 +745,33 @@ function aggregateChainPrices(
         promoPrice: row.promo_price != null ? Number(row.promo_price) : null,
         promoDescription: row.promo_description,
       });
+    }
+  }
+
+  // Pass 1b: drop prices that are wildly off the other chains' median for the
+  // same item. That's almost always a wrong barcode match (e.g. a 1kg pack vs
+  // a single pepper), and one bad row can flip the whole recommendation.
+  {
+    const byItem = new Map<string, Array<[string, number]>>();
+    for (const [chain, items] of chainMap) {
+      for (const [name, p] of items) {
+        if (!byItem.has(name)) byItem.set(name, []);
+        byItem.get(name)!.push([chain, p.price]);
+      }
+    }
+    for (const [name, entries] of byItem) {
+      if (entries.length === 2) {
+        // Can't tell which one is wrong: leave the item out of the comparison.
+        const [x, y] = entries.map(([, v]) => v);
+        if (Math.max(x, y) > Math.min(x, y) * 2.5) for (const [c] of entries) chainMap.get(c)!.delete(name);
+        continue;
+      }
+      if (entries.length < 3) continue;
+      for (const [chain, price] of entries) {
+        const others = entries.filter(([c]) => c !== chain).map(([, v]) => v).sort((x, y) => x - y);
+        const mid = others[Math.floor(others.length / 2)];
+        if (price > mid * 2.2 || price < mid / 2.2) chainMap.get(chain)!.delete(name);
+      }
     }
   }
 
@@ -830,11 +855,12 @@ function aggregateChainPrices(
 
 /**
  * Queries market_price_comparisons for the user's latest data,
- * filtered to major chains only, returns chains ranked cheapest-first.
+ * filtered to the family's preferred chains, returns chains ranked cheapest-first.
  */
 export async function getDailyPriceRecommendation(userId: string): Promise<DailyPriceRecommendationResult> {
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 2);
+  cutoff.setDate(cutoff.getDate() - PRICE_WINDOW_DAYS);
+  const { preferredChains } = await getUserChainPrefs(userId);
 
   const { data, error } = await supabase
     .from('market_price_comparisons')
@@ -847,7 +873,7 @@ export async function getDailyPriceRecommendation(userId: string): Promise<Daily
     return { recommendations: [], fetchedAt: null, coveredItems: 0, storeCount: 0 };
   }
 
-  const { recommendations, fetchedAt, coveredItems } = aggregateChainPrices(data, true, 10);
+  const { recommendations, fetchedAt, coveredItems } = aggregateChainPrices(data, preferredChains, 10);
 
   return {
     recommendations,
@@ -859,7 +885,7 @@ export async function getDailyPriceRecommendation(userId: string): Promise<Daily
 
 /**
  * Like getDailyPriceRecommendation but filtered to specific item names
- * from the user's current shopping list. Major chains only.
+ * from the user's current shopping list. Preferred chains only.
  */
 export async function getDailyPriceRecommendationForList(
   userId: string,
@@ -870,7 +896,8 @@ export async function getDailyPriceRecommendationForList(
   }
 
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 2);
+  cutoff.setDate(cutoff.getDate() - PRICE_WINDOW_DAYS);
+  const { preferredChains } = await getUserChainPrefs(userId);
 
   // Soft name matching: list names and market names often differ slightly
   // ("קוטג" vs "קוטג'", "גבינה לבנה" vs "גבינה לבנה 5% שומן 250 ג").
@@ -906,7 +933,7 @@ export async function getDailyPriceRecommendationForList(
     return { recommendations: [], fetchedAt: null, coveredItems: 0, storeCount: 0 };
   }
 
-  const { recommendations, fetchedAt, coveredItems } = aggregateChainPrices(filtered, true, 10);
+  const { recommendations, fetchedAt, coveredItems } = aggregateChainPrices(filtered, preferredChains, 10);
 
   return {
     recommendations,

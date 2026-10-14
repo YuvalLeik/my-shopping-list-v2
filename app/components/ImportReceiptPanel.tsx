@@ -478,7 +478,7 @@ export function ImportReceiptPanel({
   };
 
   return (
-    <Card className="fixed left-3 right-3 sm:left-6 sm:right-auto sm:w-[420px] max-w-[calc(100vw-1.5rem)] max-h-[80vh] shadow-2xl border-slate-200 bg-white dark:bg-slate-900 z-[60] [dir=rtl]:left-auto [dir=rtl]:right-3 sm:[dir=rtl]:right-6 [dir=rtl]:sm:left-auto flex flex-col overflow-hidden" style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}>
+    <Card className="fixed left-3 right-3 sm:left-6 sm:right-auto sm:w-[420px] max-w-[calc(100vw-1.5rem)] max-h-[80dvh] shadow-2xl border-slate-200 bg-white dark:bg-slate-900 z-[60] [dir=rtl]:left-auto [dir=rtl]:right-3 sm:[dir=rtl]:right-6 [dir=rtl]:sm:left-auto flex flex-col overflow-hidden" style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}>
       <CardHeader className="pb-2 flex-shrink-0">
         <div className="flex items-center justify-between [dir=rtl]:flex-row-reverse">
           <CardTitle className="text-base sm:text-lg text-slate-900 dark:text-slate-50">
