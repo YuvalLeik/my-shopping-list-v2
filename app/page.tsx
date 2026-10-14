@@ -119,6 +119,8 @@ export default function Home() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showImportReceipt, setShowImportReceipt] = useState(false);
+  // A receipt shared into the app from the Android share sheet (see app/sw.ts).
+  const [sharedReceipt, setSharedReceipt] = useState<{ files?: File[]; link?: string } | null>(null);
   // showMatchSettings removed - settings is now a dedicated /settings page
   const [previousListPurchases, setPreviousListPurchases] = useState<PurchaseRecordWithItems[]>([]);
   const [standalonePurchases, setStandalonePurchases] = useState<PurchaseRecordWithItems[]>([]);
@@ -392,6 +394,35 @@ export default function Home() {
       .finally(() => { if (!cancelled) setLoadingCatalog(false); });
     return () => { cancelled = true; };
   }, [activeUserId, catalogRefreshTrigger]);
+
+  // Receipt shared into the installed app: the service worker stashed the
+  // files/link in a cache and redirected here with ?shared-receipt.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('shared-receipt') || !('caches' in window)) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    (async () => {
+      try {
+        const cache = await caches.open('shared-receipts');
+        const files: File[] = [];
+        let link: string | undefined;
+        for (const req of await cache.keys()) {
+          const res = await cache.match(req);
+          if (!res) continue;
+          if (req.url.endsWith('/link')) link = await res.text();
+          else {
+            const name = decodeURIComponent(res.headers.get('x-file-name') || 'receipt');
+            files.push(new File([await res.blob()], name, { type: res.headers.get('content-type') || '' }));
+          }
+          await cache.delete(req);
+        }
+        if (files.length || link) {
+          setSharedReceipt({ files: files.length ? files : undefined, link: files.length ? undefined : link });
+          setShowImportReceipt(true);
+        }
+      } catch { /* nothing shared */ }
+    })();
+  }, []);
 
   // Purchase-history suggestions for building the next list.
   useEffect(() => {
@@ -2752,8 +2783,11 @@ export default function Home() {
         <ImportReceiptPanel
           userId={activeUserId}
           preselectedListId={viewingPreviousListId}
+          activeListId={selectedListId}
           completedLists={completedListsForDropdown}
-          onClose={() => setShowImportReceipt(false)}
+          initialFiles={sharedReceipt?.files}
+          initialLink={sharedReceipt?.link}
+          onClose={() => { setShowImportReceipt(false); setSharedReceipt(null); }}
           onRecordSaved={async () => {
             if (!activeUserId) return;
             try {
@@ -2763,8 +2797,10 @@ export default function Home() {
               }
               const standalone = await fetchStandalonePurchaseRecords(activeUserId);
               setStandalonePurchases(standalone);
-              // Receipt items may introduce new catalog entries/prices
+              // Receipt items may introduce new catalog entries/prices, and
+              // may have marked items on the current list as bought.
               setCatalogRefreshTrigger((prev) => prev + 1);
+              if (selectedListId) setItems(await fetchGroceryItems(selectedListId, activeUserId));
             } catch {
               // Failed to reload
             }

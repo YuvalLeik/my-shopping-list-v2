@@ -11,6 +11,14 @@ export interface ParsedItem {
   totalPrice: number | null;
   /** EAN/UPC product barcode printed next to the line (7-13 digits), when present */
   barcode?: string | null;
+  /** Generic product name ("חלב", "קוטג'") used for matching */
+  genericName?: string | null;
+  /** Sold by weight: quantity is kg, unitPrice is per kg */
+  weighed?: boolean;
+  /** Bag / packaging / deposit line, not a product */
+  isBag?: boolean;
+  /** The user's own item name this line is, as proposed by the AI parser */
+  matchName?: string | null;
 }
 
 export interface ParsedReceipt {
@@ -18,6 +26,8 @@ export interface ParsedReceipt {
   purchaseDate: string | null; // YYYY-MM-DD
   items: ParsedItem[];
   totalAmount: number | null;
+  /** Receipt total minus the sum of item lines, when both are known */
+  totalMismatch?: number | null;
 }
 
 // Store name patterns (common Israeli chains)

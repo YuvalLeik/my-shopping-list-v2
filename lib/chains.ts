@@ -6,7 +6,7 @@
  * Prices are taken from physical branches in the family's area, because a
  * chain's price differs by branch (Eilat is VAT-free, ~15% cheaper).
  */
-export const DEFAULT_PREFERRED_CHAINS = ['שוק העיר', 'שופרסל', 'רמי לוי', 'ויקטורי'];
+export const DEFAULT_PREFERRED_CHAINS = ['שוק העיר', 'שופרסל', 'רמי לוי', 'ויקטורי', 'יוחננוף'];
 export const DEFAULT_AREA_CITIES = ['חולון', 'בת ים', 'ראשון לציון', 'אזור'];
 
 /** Chains offered in the settings picker (families, not sub-chains). */
