@@ -46,6 +46,7 @@ import { CATEGORIES, MOST_ORDERED, MOST_ORDERED_MIN_FREQUENCY } from '@/lib/cate
 import { getItemAveragePrice, getItemAveragePrices, recordPrices } from '@/lib/itemPrices';
 import { getDailyPriceRecommendationForList, DailyPriceRecommendationResult } from '@/lib/analytics';
 import { GroceryItemRow } from '@/components/GroceryItemRow';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { SuggestionsRail } from '@/components/SuggestionsRail';
 import { getListSuggestions, ItemSuggestion, SuggestionKind } from '@/lib/suggestions';
 import { CheapestStoreBanner } from '@/components/CheapestStoreBanner';
@@ -119,6 +120,7 @@ export default function Home() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showImportReceipt, setShowImportReceipt] = useState(false);
+  const isMobile = useIsMobile();
   // A receipt shared into the app from the Android share sheet (see app/sw.ts).
   const [sharedReceipt, setSharedReceipt] = useState<{ files?: File[]; link?: string } | null>(null);
   // showMatchSettings removed - settings is now a dedicated /settings page
@@ -2564,7 +2566,9 @@ export default function Home() {
           {/* Previous list / standalone purchase - Mobile: full-width drawer overlay */}
           <div className="md:hidden">
             <Drawer
-              open={!!(viewingPreviousListId || viewingStandalonePurchaseId)}
+              // Mobile only: a modal drawer blocks clicks on everything outside
+              // it, and its portal escapes the md:hidden wrapper on desktop.
+              open={isMobile && !!(viewingPreviousListId || viewingStandalonePurchaseId)}
               onOpenChange={(open) => {
                 if (!open) handleClosePreviousList();
               }}

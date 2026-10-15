@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Loader2, ClipboardPaste, FileText, Camera, Trash2, Plus, Check, AlertCircle, Search, Image as ImageIcon, Link2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { t } from '@/lib/translations';
 import type { ParsedReceipt, ParsedItem } from '@/lib/receiptParser';
@@ -35,6 +35,17 @@ interface ImportReceiptPanelProps {
 type Tab = 'file' | 'link' | 'paste';
 type Step = 'input' | 'matching' | 'parsed' | 'saving';
 type ParseResponse = ParsedReceipt & { rawText?: string; parserUsed?: string; parserError?: string };
+
+/** Long receipts take Gemini ~30–40s; give up with a clear message well after that. */
+const CLIENT_TIMEOUT_MS = 90_000;
+
+function errorText(err: unknown): string {
+  if (err instanceof DOMException && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+    return 'הקריאה לקחה יותר מדי זמן. בדקו את החיבור ונסו שוב.';
+  }
+  if (err instanceof TypeError) return 'אין חיבור לשרת. בדקו את האינטרנט ונסו שוב.';
+  return err instanceof Error ? err.message : 'שגיאה לא ידועה';
+}
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
@@ -69,6 +80,9 @@ export function ImportReceiptPanel({
   const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null);
   const [matchedItems, setMatchedItems] = useState<ReceiptMatch[]>([]);
   const [showAllLines, setShowAllLines] = useState(false);
+  // Shown inside the panel (a toast is easy to miss) with a retry button.
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState<(() => void) | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -167,7 +181,7 @@ export function ImportReceiptPanel({
   const postForm = async (formData: FormData): Promise<ParseResponse> => {
     formData.append('userId', userId);
     formData.append('candidates', JSON.stringify(await candidateNames()));
-    const res = await fetch('/api/receipt-parse', { method: 'POST', body: formData });
+    const res = await fetch('/api/receipt-parse', { method: 'POST', body: formData, signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS) });
     const json = await res.json().catch(() => ({ success: false, error: `שגיאת שרת (${res.status})` }));
     if (!json.success) throw new Error(json.error || 'Parse failed');
     return json.data;
@@ -177,6 +191,8 @@ export function ImportReceiptPanel({
   const analyzeFiles = async (files: File[]) => {
     if (!files.length) return;
     setLoading(true);
+    setError(null);
+    setRetry(() => () => analyzeFiles(files));
     try {
       const pdf = files.find(isPdf);
       const formData = new FormData();
@@ -193,23 +209,25 @@ export function ImportReceiptPanel({
       photoSegments.forEach((s) => URL.revokeObjectURL(s.url));
       setPhotoSegments([]);
     } catch (err) {
-      toast.error(t.receiptParseFailed, { description: err instanceof Error ? err.message : 'Unknown error' });
+      setError(errorText(err));
       setStep('input');
     } finally {
       setLoading(false);
     }
   };
 
+  // "בחר קובץ": whatever was picked (PDF, screenshot, photos) is read right away.
   const handleFilesPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
-    if (!files.length) return;
-    if (files.some(isPdf) || files.length > 1) {
-      analyzeFiles(files);
-      return;
-    }
-    // A single photo: keep it as a segment so more parts can be added.
-    addSegments(files);
+    if (files.length) analyzeFiles(files);
+  };
+
+  // Camera: collect parts of a long paper receipt, then analyze them together.
+  const handleCameraPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length) addSegments(files);
   };
 
   const addSegments = (files: File[]) => {
@@ -230,21 +248,21 @@ export function ImportReceiptPanel({
       return;
     }
     setLoading(true);
+    setError(null);
+    setRetry(() => () => handleLinkSubmit(value));
     setSource('pdf_upload');
     try {
       const res = await fetch('/api/receipt-from-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: value, candidates: await candidateNames() }),
+        signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
       });
       const json = await res.json().catch(() => ({ success: false, error: `שגיאת שרת (${res.status})` }));
       if (!json.success) throw new Error(json.error || 'Link failed');
       await handleParsed(json.data);
     } catch (err) {
-      toast.error('לא הצלחתי לקרוא את הקבלה מהקישור', {
-        description: err instanceof Error ? err.message : undefined,
-        duration: 8000,
-      });
+      setError(`לא הצלחתי לקרוא את הקבלה מהקישור: ${errorText(err)}`);
       setStep('input');
     } finally {
       setLoading(false);
@@ -262,18 +280,21 @@ export function ImportReceiptPanel({
       return handleLinkSubmit(pasteText.trim());
     }
     setLoading(true);
+    setError(null);
+    setRetry(() => () => handlePasteSubmit());
     setSource('copy_paste');
     try {
       const res = await fetch('/api/receipt-parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rawText: pasteText, candidates: await candidateNames() }),
+        signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Parse failed');
       await handleParsed(json.data);
     } catch (err) {
-      toast.error(t.receiptParseFailed, { description: err instanceof Error ? err.message : 'Unknown error' });
+      setError(errorText(err));
       setStep('input');
     } finally {
       setLoading(false);
@@ -474,17 +495,29 @@ export function ImportReceiptPanel({
   ];
 
   return (
-    <Card className="fixed left-3 right-3 sm:left-6 sm:right-auto sm:w-[440px] max-w-[calc(100vw-1.5rem)] max-h-[80dvh] shadow-2xl border-slate-200 bg-white dark:bg-slate-900 z-[60] [dir=rtl]:left-auto [dir=rtl]:right-3 sm:[dir=rtl]:right-6 [dir=rtl]:sm:left-auto flex flex-col overflow-hidden" style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}>
-      <CardHeader className="pb-2 flex-shrink-0">
+    // Its own top-most dialog layer: it's opened from inside other modal
+    // layers (the previous-list drawer), which block taps on anything outside
+    // themselves; a newer Radix layer stacks above them and stays interactive.
+    <DialogPrimitive.Root open onOpenChange={(open) => { if (!open && !loading && !saving) onClose(); }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[200] bg-black/50" />
+        <DialogPrimitive.Content
+          dir="rtl"
+          aria-describedby={undefined}
+          onPointerDownOutside={(e) => { if (loading || saving) e.preventDefault(); }}
+          className="fixed z-[201] flex flex-col overflow-hidden bg-white dark:bg-slate-900 shadow-2xl outline-none inset-x-0 bottom-0 max-h-[90dvh] rounded-t-2xl sm:inset-x-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[460px] sm:max-h-[85dvh] sm:rounded-xl"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
+      <div className="px-4 pt-4 pb-2 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base sm:text-lg text-slate-900 dark:text-slate-50">{t.importReceipt}</CardTitle>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-9 w-9 p-0" aria-label={t.cancel}>
+          <DialogPrimitive.Title className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-50">{t.importReceipt}</DialogPrimitive.Title>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={loading || saving} className="h-9 w-9 p-0" aria-label={t.cancel}>
             <X className="h-4 w-4" />
           </Button>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-3 overflow-y-auto flex-1 pb-4">
+      <div className="px-4 space-y-3 overflow-y-auto flex-1 pb-4">
         {step === 'input' && (
           <>
             <div className="flex gap-1">
@@ -505,6 +538,15 @@ export function ImportReceiptPanel({
               ))}
             </div>
 
+            {error && !loading && (
+              <div role="alert" className="rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-3 text-sm text-red-800 dark:text-red-200 space-y-2">
+                <div>⚠️ {t.receiptParseFailed}: {error}</div>
+                {retry && (
+                  <Button size="sm" variant="outline" onClick={() => retry()} className="min-h-[36px]">נסה שוב</Button>
+                )}
+              </div>
+            )}
+
             {loading && (
               <div className="flex flex-col items-center justify-center py-6 text-center">
                 <Loader2 className="h-6 w-6 animate-spin text-emerald-600 mb-2" />
@@ -519,7 +561,7 @@ export function ImportReceiptPanel({
                   PDF של קבלה דיגיטלית, צילום מסך או צילום של קבלת נייר.
                 </p>
                 <input ref={fileInputRef} type="file" accept="application/pdf,.pdf,image/*" multiple onChange={handleFilesPicked} className="hidden" />
-                <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFilesPicked} className="hidden" />
+                <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleCameraPicked} className="hidden" />
 
                 {photoSegments.length > 0 && (
                   <>
@@ -780,7 +822,9 @@ export function ImportReceiptPanel({
             <span className="text-sm text-slate-600 dark:text-slate-400">{t.receiptSaving}</span>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
