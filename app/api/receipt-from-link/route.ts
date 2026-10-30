@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { lookup } from 'dns/promises';
 import { isIP } from 'net';
-import { parseReceiptWithAI, findDateInText } from '@/lib/geminiReceiptParser';
+import { parseReceiptWithAI, findDateInText, PARSE_BUDGET_MS } from '@/lib/geminiReceiptParser';
 import { parsePdfBuffer } from '@/lib/receiptIngest';
 
 // Digital receipts arrive as links by SMS/WhatsApp (Weezmo, chain sites…).
 // Fetch the link server-side and parse whatever it serves: a PDF directly,
 // an HTML page with a PDF/download link, or the page text itself.
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -82,6 +82,8 @@ function htmlToText(html: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // The link fetch (up to 15s/hop) also comes out of the parse budget.
+  const deadline = Date.now() + PARSE_BUDGET_MS;
   let link: string;
   let candidateNames: string[] = [];
   try {
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
     const { res, url } = await fetchPublic(found[0]);
     if (!res.ok) throw new Error(`הקישור החזיר שגיאה (${res.status})`);
     const buf = await readLimited(res);
-    const opts = { candidateNames };
+    const opts = { candidateNames, deadline };
 
     if (isPdf(res, buf)) {
       return NextResponse.json({ success: true, data: await parsePdfBuffer(buf, opts) });

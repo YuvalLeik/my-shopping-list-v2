@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseReceiptWithAI, parseReceiptMultimodal, findDateInText, ParseOptions } from '@/lib/geminiReceiptParser';
+import { parseReceiptWithAI, parseReceiptMultimodal, findDateInText, ParseOptions, PARSE_BUDGET_MS } from '@/lib/geminiReceiptParser';
 import { parsePdfBuffer } from '@/lib/receiptIngest';
 
-// Long digital receipts (100+ lines) take Gemini ~30s.
-export const maxDuration = 60;
+// Long digital receipts (100+ lines) take Gemini ~30s; a hung call is
+// retried on a fallback model within PARSE_BUDGET_MS.
+export const maxDuration = 120;
 
 const IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
@@ -33,12 +34,13 @@ function readOptions(raw: unknown): ParseOptions {
 }
 
 export async function POST(request: NextRequest) {
+  const deadline = Date.now() + PARSE_BUDGET_MS;
   try {
     const contentType = request.headers.get('content-type') || '';
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
-      const opts = readOptions(formData.get('candidates'));
+      const opts = { ...readOptions(formData.get('candidates')), deadline };
       const files = formData
         .getAll('file')
         .filter((f): f is File => f instanceof File);
@@ -96,7 +98,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const opts: ParseOptions = Array.isArray(body.candidates) ? { candidateNames: body.candidates } : {};
+    const opts: ParseOptions = Array.isArray(body.candidates) ? { candidateNames: body.candidates, deadline } : { deadline };
     const parsed = await parseReceiptWithAI(rawText, opts);
     if (!parsed.purchaseDate) parsed.purchaseDate = findDateInText(rawText);
     return NextResponse.json({ success: true, data: { ...parsed, rawText } });

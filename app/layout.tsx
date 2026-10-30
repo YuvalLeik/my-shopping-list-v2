@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     title: "רשימת קניות",
   },
   icons: {
-    apple: "/icon-192x192.png",
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
   },
 };
 

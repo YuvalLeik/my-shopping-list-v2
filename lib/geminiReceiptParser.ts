@@ -1,10 +1,15 @@
 import { parseReceipt, ParsedReceipt, ParsedItem } from './receiptParser';
 
-// gemini-2.0-flash was retired by Google (mid-2026); 2.5-flash is the
-// current stable multimodal model.
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-/** Long digital receipts run to 100+ lines; leave room under the route's 60s limit. */
-const GEMINI_TIMEOUT_MS = 50_000;
+// 2.5-flash occasionally hangs past the timeout on real receipts; 3.5-flash
+// is faster and writes more compact JSON. 2.5 stays as a fallback.
+const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash'];
+const geminiUrl = (model: string) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+/** One Gemini call; a hung call must leave time for the fallback model. */
+const GEMINI_TIMEOUT_MS = 45_000;
+/** Whole parse (fallback model, mismatch retry) must end before the route's maxDuration (120s). */
+export const PARSE_BUDGET_MS = 100_000;
+/** Don't start another call with less time than this left. */
+const MIN_CALL_MS = 15_000;
 /** Receipt total vs. sum of lines: beyond this we retry once, then warn. */
 const MISMATCH_TOLERANCE = 0.02;
 
@@ -16,6 +21,8 @@ export type ParserMeta = {
 export interface ParseOptions {
   /** The user's own item names (open list first); the model maps lines onto them. */
   candidateNames?: string[];
+  /** Epoch ms by which parsing must finish (default: PARSE_BUDGET_MS from now). */
+  deadline?: number;
 }
 
 const SYSTEM_PROMPT = `You are an expert parser of Israeli supermarket receipts (Hebrew). You receive a receipt as a PDF, photo(s) or text: a paper slip, a digital receipt (e.g. Weezmo / "ReadMe"), or an online order. Extract every purchased line.
@@ -133,11 +140,32 @@ function mismatchOf(items: ParsedItem[], total: number | null): number | null {
 
 type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
 
-async function callGemini(parts: GeminiPart[], apiKey: string): Promise<Record<string, unknown>> {
-  const response = await fetch(GEMINI_API_URL, {
+/** Errors worth retrying on the fallback model: timeouts, overload, rate limits. */
+class RetryableGeminiError extends Error {}
+
+async function callGemini(parts: GeminiPart[], apiKey: string, deadline: number): Promise<Record<string, unknown>> {
+  let lastError: unknown;
+  for (const model of GEMINI_MODELS) {
+    const remaining = deadline - Date.now();
+    if (remaining < MIN_CALL_MS) break;
+    try {
+      return await callGeminiModel(model, parts, apiKey, Math.min(GEMINI_TIMEOUT_MS, remaining));
+    } catch (err) {
+      lastError = err;
+      const retryable = err instanceof RetryableGeminiError
+        || (err instanceof DOMException && (err.name === 'TimeoutError' || err.name === 'AbortError'));
+      console.error(`[geminiReceiptParser] ${model} failed:`, err instanceof Error ? err.message : err);
+      if (!retryable) throw err;
+    }
+  }
+  throw lastError ?? new Error('Not enough time left to read the receipt');
+}
+
+async function callGeminiModel(model: string, parts: GeminiPart[], apiKey: string, timeoutMs: number): Promise<Record<string, unknown>> {
+  const response = await fetch(geminiUrl(model), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-    signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify({
       contents: [{ parts }],
       generationConfig: {
@@ -145,7 +173,8 @@ async function callGemini(parts: GeminiPart[], apiKey: string): Promise<Record<s
         // Thinking tokens count against the output budget and truncated long
         // receipts; the schema does the structuring work instead.
         thinkingConfig: { thinkingBudget: 0 },
-        maxOutputTokens: 32768,
+        // Bounds a runaway repetition loop; 100+ line receipts need ~8k.
+        maxOutputTokens: 16384,
         responseMimeType: 'application/json',
         responseSchema: RESPONSE_SCHEMA,
       },
@@ -161,12 +190,13 @@ async function callGemini(parts: GeminiPart[], apiKey: string): Promise<Record<s
     } catch {
       if (errorText) errMsg = errorText.slice(0, 200);
     }
+    if (response.status === 429 || response.status >= 500) throw new RetryableGeminiError(errMsg);
     throw new Error(errMsg);
   }
 
   const data = await response.json();
   const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Gemini returned no content');
+  if (!text) throw new RetryableGeminiError('Gemini returned no content');
   try {
     return JSON.parse(text);
   } catch {
@@ -199,10 +229,12 @@ async function parseWithGemini(
 
   const candidateNames = (opts.candidateNames ?? []).slice(0, 200);
   const candidates = new Set(candidateNames);
+  const deadline = opts.deadline ?? Date.now() + PARSE_BUDGET_MS;
   const run = async (hint: string) => {
     const parsed = await callGemini(
       [{ text: SYSTEM_PROMPT + extraNote + hint }, ...candidatesPart(candidateNames), ...content],
       apiKey,
+      deadline,
     );
     const items = mergeDuplicateLines(normalizeItems(parsed.items, candidates));
     const totalAmount = num(parsed.totalAmount);
@@ -218,7 +250,7 @@ async function parseWithGemini(
   let result = await run('');
   const off = (r: ParsedReceipt) =>
     r.totalAmount != null && r.totalMismatch != null && Math.abs(r.totalMismatch) > r.totalAmount * MISMATCH_TOLERANCE;
-  if (off(result)) {
+  if (off(result) && deadline - Date.now() >= MIN_CALL_MS) {
     const retry = await run(
       `\n\nIMPORTANT: a previous attempt's lines summed to ₪${round2((result.totalAmount ?? 0) - (result.totalMismatch ?? 0))} but the receipt total is ₪${result.totalAmount}. Re-read carefully: do not skip lines, and subtract every discount line from the product above it.`,
     ).catch(() => null);

@@ -36,8 +36,8 @@ type Tab = 'file' | 'link' | 'paste';
 type Step = 'input' | 'matching' | 'parsed' | 'saving';
 type ParseResponse = ParsedReceipt & { rawText?: string; parserUsed?: string; parserError?: string };
 
-/** Long receipts take Gemini ~30–40s; give up with a clear message well after that. */
-const CLIENT_TIMEOUT_MS = 90_000;
+/** The server gives up within ~100s (fallback model included); wait a bit longer than that. */
+const CLIENT_TIMEOUT_MS = 130_000;
 
 function errorText(err: unknown): string {
   if (err instanceof DOMException && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
@@ -136,6 +136,10 @@ export function ImportReceiptPanel({
 
   /** Shared tail of every input path: fill the form, match, and auto-save when nothing is doubtful. */
   const handleParsed = async (data: ParseResponse) => {
+    // The AI failed and nothing was read: an error with retry, not an empty form.
+    if (data.items.length === 0 && data.parserUsed !== 'gemini') {
+      throw new Error(`לא הצלחתי לקרוא את הקבלה${data.parserError ? ` (${data.parserError})` : ''}. נסו שוב.`);
+    }
     setRawText(data.rawText || '');
     setParsedStoreName(data.storeName || '');
     setParsedDate(data.purchaseDate || '');
@@ -541,9 +545,12 @@ export function ImportReceiptPanel({
             {error && !loading && (
               <div role="alert" className="rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-3 text-sm text-red-800 dark:text-red-200 space-y-2">
                 <div>⚠️ {t.receiptParseFailed}: {error}</div>
-                {retry && (
-                  <Button size="sm" variant="outline" onClick={() => retry()} className="min-h-[36px]">נסה שוב</Button>
-                )}
+                <div className="flex gap-2">
+                  {retry && (
+                    <Button size="sm" variant="outline" onClick={() => retry()} className="min-h-[36px]">נסה שוב</Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => { setError(null); setStep('parsed'); }} className="min-h-[36px]">הזנה ידנית</Button>
+                </div>
               </div>
             )}
 
