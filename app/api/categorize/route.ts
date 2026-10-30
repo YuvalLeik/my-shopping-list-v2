@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CATEGORIES } from '@/lib/categories';
+import { allowRequest, rateKey } from '@/lib/rateLimit';
 
 // Last-resort categorizer for names the history lookup and keyword dictionary
 // both missed. Results are cached client-side into shopping_items, so each
 // distinct name costs at most one call.
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+// Cheapest current model; 2.5-flash-lite is already retired, and 2.5-flash thinks (costs more) by default.
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
+/** Each name is cached after one call, so a family never needs many. */
+const MAX_CALLS_PER_DAY = 200;
 const MAX_NAMES = 40;
 const ASSIGNABLE = CATEGORIES.filter((c) => c !== 'ללא קטגוריה');
 
@@ -23,6 +27,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
   if (names.length === 0) return NextResponse.json({ categories: {} });
+  if (!allowRequest(rateKey(request), MAX_CALLS_PER_DAY)) return NextResponse.json({ categories: {} });
 
   const prompt = `You categorize Israeli supermarket products (names are in Hebrew).
 Allowed categories (use the exact Hebrew string): ${ASSIGNABLE.map((c) => `"${c}"`).join(', ')}.
@@ -37,7 +42,7 @@ ${names.map((n) => `- ${n}`).join('\n')}`;
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+        generationConfig: { temperature: 0, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'minimal' } },
       }),
       signal: AbortSignal.timeout(15000),
     });

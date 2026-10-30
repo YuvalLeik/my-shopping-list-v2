@@ -48,11 +48,14 @@ import { getDailyPriceRecommendationForList, DailyPriceRecommendationResult } fr
 import { GroceryItemRow } from '@/components/GroceryItemRow';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { SuggestionsRail } from '@/components/SuggestionsRail';
-import { getListSuggestions, ItemSuggestion, SuggestionKind } from '@/lib/suggestions';
+import { getListSuggestions, getUsualSpend, ItemSuggestion, SuggestionKind } from '@/lib/suggestions';
+import { ReadyCheckDialog } from '@/components/ReadyCheckDialog';
+import { getDismissed, dismissForList, dismissForever } from '@/lib/suggestionDismiss';
 import { CheapestStoreBanner } from '@/components/CheapestStoreBanner';
 import { suggestCategory, categorizeWithAI } from '@/lib/autoCategory';
 import { guessCategoryByKeywords } from '@/lib/categoryKeywords';
-import { parseBulkItems } from '@/lib/bulkAdd';
+import { parseBulkItems, splitQuantity } from '@/lib/bulkAdd';
+import { rankItemNames, matchFamilyItem } from '@/lib/itemSearch';
 import { CategoryGroup, CollapseAllButton } from '@/components/CategoryGroup';
 import { groupItemsByCategory, useCollapsedCategories } from '@/lib/categoryGroups';
 
@@ -134,6 +137,10 @@ export default function Home() {
   const [priceRefreshing, setPriceRefreshing] = useState(false);
   // History-based suggestions (computed once per user; filtered against the list on render)
   const [historySuggestions, setHistorySuggestions] = useState<Record<SuggestionKind, ItemSuggestion[]> | null>(null);
+  // Bumped when a suggestion is dismissed, to re-read the dismissed set.
+  const [dismissVersion, setDismissVersion] = useState(0);
+  const [showReadyCheck, setShowReadyCheck] = useState(false);
+  const [usualSpend, setUsualSpend] = useState<number | null>(null);
   const [marketRefreshTrigger, setMarketRefreshTrigger] = useState(0);
   // Storefront catalog (supermarket-style front page)
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
@@ -339,13 +346,16 @@ export default function Home() {
       return;
     }
     let cancelled = false;
-    getDailyPriceRecommendationForList(activeUserId, listNames)
-      .then((result) => {
-        if (cancelled) return;
-        setMarketBanner(result);
-      })
-      .catch((err) => console.error("Failed to load market price banner:", err));
-    return () => { cancelled = true; };
+    // Debounced: quantity taps and quick adds change `items` many times in a row.
+    const timer = setTimeout(() => {
+      getDailyPriceRecommendationForList(activeUserId, listNames)
+        .then((result) => {
+          if (cancelled) return;
+          setMarketBanner(result);
+        })
+        .catch((err) => console.error("Failed to load market price banner:", err));
+    }, 800);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [activeUserId, items, marketRefreshTrigger]);
 
   // Re-price the current list now (small budget; recently priced items are skipped).
@@ -426,6 +436,11 @@ export default function Home() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!activeUserId) { setUsualSpend(null); return; }
+    getUsualSpend(activeUserId).then(setUsualSpend).catch(() => setUsualSpend(null));
+  }, [activeUserId]);
+
   // Purchase-history suggestions for building the next list.
   useEffect(() => {
     if (!activeUserId) { setHistorySuggestions(null); return; }
@@ -486,16 +501,15 @@ export default function Home() {
   // Filter suggestions based on input
   useEffect(() => {
     if (newItemName.trim().length > 0) {
-      const filtered = allItemNames.filter(name =>
-        name.toLowerCase().includes(newItemName.toLowerCase())
-      );
+      // The family's own items first (typos tolerated), then the shared catalog.
+      const filtered = rankItemNames(newItemName, catalog, allItemNames);
       setFilteredSuggestions(filtered);
       setShowSuggestions(filtered.length > 0);
     } else {
       setFilteredSuggestions([]);
       setShowSuggestions(false);
     }
-  }, [newItemName, allItemNames]);
+  }, [newItemName, allItemNames, catalog]);
 
   // Handle scroll for FAB visibility
   useEffect(() => {
@@ -714,12 +728,20 @@ export default function Home() {
 
   // Pasted multi-line / comma text (e.g. a WhatsApp list) becomes many items.
   // Categories: history, then keywords, then one batched AI call for the rest.
-  const handleBulkAdd = async (names: string[]) => {
+  // "2 חלב" / "חלב x2" set the quantity; names are matched onto the family's own items.
+  const handleBulkAdd = async (lines: string[]) => {
     if (!selectedListId || !activeUserId) return;
     const listId = selectedListId;
     const userId = activeUserId;
+    const familyNames = catalog.map((c) => c.name);
+    const qtyByName = new Map<string, number>();
+    for (const line of lines) {
+      const { name, qty } = splitQuantity(line);
+      const resolved = matchFamilyItem(name, familyNames) ?? name;
+      qtyByName.set(resolved, (qtyByName.get(resolved) ?? 0) + qty);
+    }
     const existing = new Set(items.map((i) => normalizeItemName(i.name)));
-    const fresh = names.filter((n) => !existing.has(normalizeItemName(n)));
+    const fresh = Array.from(qtyByName.keys()).filter((n) => !existing.has(normalizeItemName(n)));
     if (fresh.length === 0) {
       toast.info('כל הפריטים כבר ברשימה');
       return;
@@ -741,13 +763,9 @@ export default function Home() {
         }
       }
       const prices = await getItemAveragePrices(userId, fresh).catch(() => new Map<string, number>());
-      let added = 0;
-      for (const n of fresh) {
-        try {
-          await createGroceryItem(listId, n, 1, categories.get(n) || 'ללא קטגוריה', null, prices.get(n) ?? null);
-          added++;
-        } catch { /* skip this one, keep going */ }
-      }
+      const results = await Promise.allSettled(fresh.map((n) =>
+        createGroceryItem(listId, n, qtyByName.get(n) ?? 1, categories.get(n) || 'ללא קטגוריה', null, prices.get(n) ?? null)));
+      const added = results.filter((r) => r.status === 'fulfilled').length;
       setItems(await fetchGroceryItems(listId, userId));
       setNewItemName('');
       setShowAddItemDialog(false);
@@ -1255,6 +1273,26 @@ export default function Home() {
     }
   };
 
+  // Regular items (bought 3+ times) missing from the list, for the pre-shopping check.
+  const likelyForgotten = (): ItemSuggestion[] => {
+    if (!historySuggestions || !activeUserId) return [];
+    const skip = getDismissed(activeUserId, selectedListId);
+    for (const i of items) skip.add(normalizeItemName(i.name));
+    return [...historySuggestions.due, ...historySuggestions.staple]
+      .filter((s) => s.timesBought >= 3 && !skip.has(normalizeItemName(s.name)))
+      .sort((a, b) => b.timesBought - a.timesBought)
+      .slice(0, 8);
+  };
+
+  const cheapestChain = marketBanner?.recommendations
+    .filter((r) => !r.isLowCoverage)
+    .sort((a, b) => a.totalBasketCost - b.totalBasketCost)[0] ?? null;
+
+  const handleReadyClick = () => {
+    if (likelyForgotten().length || cheapestChain || cartEstimatedTotal > 0) setShowReadyCheck(true);
+    else handleMarkReady();
+  };
+
   const handleBackToEdit = async () => {
     if (!selectedListId || !activeUserId) return;
     setUiMode('build');
@@ -1275,18 +1313,32 @@ export default function Home() {
       cheapestChain: null, cheapestPrice: null, frequency: s.timesBought,
     };
 
-  const handleAddSuggestion = (s: ItemSuggestion) => handleAddFromCatalog(suggestionToEntry(s));
+  const handleAddSuggestion = (s: ItemSuggestion) => handleAddFromCatalog(suggestionToEntry(s), s.typicalQty);
 
   const handleAddAllSuggestions = async (list: ItemSuggestion[]) => {
-    for (const s of list) await handleAddFromCatalog(suggestionToEntry(s));
+    for (const s of list) await handleAddFromCatalog(suggestionToEntry(s), s.typicalQty);
   };
 
-  const handleAddFromCatalog = async (entry: CatalogEntry) => {
+  const handleDismissSuggestion = (s: ItemSuggestion) => {
+    if (!selectedListId || !activeUserId) return;
+    const userId = activeUserId;
+    dismissForList(selectedListId, s.name);
+    setDismissVersion((v) => v + 1);
+    toast(`${s.name} הוסתר מהרשימה הזו`, {
+      duration: 5000,
+      action: {
+        label: 'אל תציע יותר',
+        onClick: () => { dismissForever(userId, s.name); setDismissVersion((v) => v + 1); },
+      },
+    });
+  };
+
+  const handleAddFromCatalog = async (entry: CatalogEntry, qty = 1) => {
     if (!selectedListId || !activeUserId) return;
     const norm = normalizeItemName(entry.name);
     const existing = items.find((i) => normalizeItemName(i.name) === norm);
     if (existing) {
-      await handleCatalogQuantityChange(existing, existing.quantity + 1);
+      await handleCatalogQuantityChange(existing, existing.quantity + qty);
       return;
     }
     setBusyCatalogNames((prev) => new Set(prev).add(norm));
@@ -1294,7 +1346,7 @@ export default function Home() {
       const newItem = await createGroceryItem(
         selectedListId,
         entry.name,
-        1,
+        qty,
         entry.category || 'ללא קטגוריה',
         entry.image_url,
         entry.avgPrice
@@ -1859,7 +1911,9 @@ export default function Home() {
                     </div>
                   )}
                   {!catalogSearch.trim() && !categoryFilter && historySuggestions && (() => {
-                    const onList = new Set(items.map((i) => normalizeItemName(i.name)));
+                    void dismissVersion;
+                    const onList = activeUserId ? getDismissed(activeUserId, selectedListId) : new Set<string>();
+                    for (const i of items) onList.add(normalizeItemName(i.name));
                     const visible = {
                       due: historySuggestions.due.filter((x) => !onList.has(normalizeItemName(x.name))),
                       staple: historySuggestions.staple.filter((x) => !onList.has(normalizeItemName(x.name))),
@@ -1872,6 +1926,7 @@ export default function Home() {
                           busyNames={busyCatalogNames}
                           onAdd={handleAddSuggestion}
                           onAddAll={handleAddAllSuggestions}
+                          onDismiss={handleDismissSuggestion}
                         />
                       </div>
                     );
@@ -2226,7 +2281,7 @@ export default function Home() {
                           <span className="hidden sm:inline">{t.importReceipt}</span>
                         </Button>
                         <Button
-                          onClick={handleMarkReady}
+                          onClick={handleReadyClick}
                           className="bg-blue-600 hover:bg-blue-700 text-white [dir=rtl]:flex-row-reverse"
                           size="sm"
                           title={t.readyForShopping}
@@ -2343,6 +2398,9 @@ export default function Home() {
                                     <span className="text-slate-400 dark:text-slate-500 font-normal">
                                       {' '}({cartPricedCount} מתוך {items.length} מתומחרים)
                                     </span>
+                                  )}
+                                  {usualSpend != null && (
+                                    <span className="text-slate-500 dark:text-slate-400 font-normal"> · קנייה רגילה ~₪{usualSpend.toLocaleString()}</span>
                                   )}
                                 </div>
                               )}
@@ -2781,6 +2839,20 @@ export default function Home() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ReadyCheckDialog
+        open={showReadyCheck}
+        forgotten={showReadyCheck ? likelyForgotten() : []}
+        cheapest={cheapestChain}
+        estimatedTotal={cartEstimatedTotal}
+        usualSpend={usualSpend}
+        onCancel={() => setShowReadyCheck(false)}
+        onConfirm={async (add) => {
+          for (const s of add) await handleAddFromCatalog(suggestionToEntry(s), s.typicalQty);
+          setShowReadyCheck(false);
+          await handleMarkReady();
+        }}
+      />
 
       {/* Import Receipt Panel */}
       {showImportReceipt && activeUserId && (
